@@ -52,7 +52,7 @@ class Product{
     virtual void display() const{
         cout << " Mã sản phẩm " << productID << endl; // In mã sản phẩm
         cout << " Tên sản phẩm " << name << endl; // In tên sản phẩm
-        cout << " Giá sản phẩm " << price << "VND" << endl; // In giá sản phẩm
+        cout << " Giá sản phẩm " << price << " VND " << endl; // In giá sản phẩm
         cout << " Số lượng " << quantity << endl; // In số lượng 
     }
     

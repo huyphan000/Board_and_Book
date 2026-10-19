@@ -1,4 +1,3 @@
-
 #include <iostream>
 #include <windows.h>
 #include <string>
@@ -27,7 +26,7 @@ public:
             return 0;
         return pricePerDay * days;
     }
-    // Tính tiền phạt trả truyện trễ
+    // Tính tiền phạt trả trễ
     double calculateLateFee(double feePerDay, int lateDays) {
         if (feePerDay < 0 || lateDays < 0) // Kiểm tra thông tin dữ liệu
             return 0;
@@ -55,7 +54,7 @@ public:
 class Payment {
 private:
     string paymentId; // Mã giao dịch
-    string rentalId; // Mã thuê truyện
+    string rentalId; // Mã thuê
     double amount; // Số tiền trước phí
     PaymentMethod method; // Phương thức thanh toán
     string paymentDate; // Ngày thanh toán
@@ -88,7 +87,7 @@ public:
     }
     // Tính tổng tiền cần thanh toán 
     double calculateFinalAmount() const {
-        return amount + calculateExtraFee(); // Cộng tien va phu phi
+        return amount + calculateExtraFee();
     }
     // Xác nhận giao dịch thành công
     void completePayment() {
@@ -166,7 +165,7 @@ private:
 	double lateIncome; // Tổng tiền phạt trả trễ
     double damageIncome; // Tổng tiền bồi thường
     double extraFeeIncome; // Tổng phí thanh toán
-    double buybackExpense; // Tổng tiền chi mua lại truyện
+    double buybackExpense; // Tổng tiền chi mua lại truyện và board game
     int completedPayments; // Số giao dịch thành công
 public:
 	// Khởi tạo thống kê tiền mặc định
@@ -175,7 +174,7 @@ public:
 		lateIncome = 0;  // Tiền phạt ban đầu bằng 0
 		damageIncome = 0;// Tiền bồi thường ban đầu bằng 0
 		extraFeeIncome = 0; // Phụ phí ban đầu bằng 0
-        buybackExpense = 0;  // Chi mua lại truyện ban đầu bằng 0
+        buybackExpense = 0;  // Chi mua lại truyện và board game ban đầu bằng 0
         completedPayments = 0; // Giao dịch thành công ban đầu bằng 0
     }
     // Gọi hàm doanh thu tiền thuê

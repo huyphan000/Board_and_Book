@@ -1,7 +1,7 @@
 #include <iostream>
 #include <windows.h>
 #include <string>
-
+#include "class_Customer_and_Rental.cpp"
 using namespace std;
 
 // Phương thức thanh toán
@@ -225,52 +225,5 @@ public:
         cout << "Giao dịch thành công: "<< completedPayments << endl; // In số giao dịch
         cout << "Tổng các khoản thu: "<< calculateTotalIncome() << " VND\n"; // In tổng doanh thu
         cout << "Tổng thu sau khi trừ chi phí mua lại: "<< calculateNetIncome() << " VND\n"; // In tổng tiền thu sau khi trừ chi phí mua lại
-    }
-};
-
-// Lớp khách hàng VIP kế thừa từ lớp Customer
-class VIPCustomer : public Customer {
-private:
-    int membershipPoints;  // Điểm tích lũy
-public:
-    // Khởi tạo khách hàng VIP
-    VIPCustomer(string id, string name, string phone, string mail, int points) : Customer(id, name, phone, mail) {
-        membershipPoints = (points > 0) ? points : 0;
-    }
-    // Lấy điểm tích lũy
-    int getMembershipPoints() const {
-        return membershipPoints;
-    }
-    // Cộng điểm tích lũy
-    void addPoints(int points) {
-        if (points > 0)
-            membershipPoints += points;
-    }
-    // Kiểm tra đủ điểm đổi quà
-    bool canRedeemGift() const {
-        return membershipPoints >= 100;
-    }
-    // Đổi quà bằng điểm tích lũy
-    bool redeemGift(string giftType) {
-        if (membershipPoints < 100) {
-            cout << "Chưa đủ 100 điểm để đổi quà!" << endl;
-            return false;
-        }
-        if (giftType != "truyện tranh" && giftType != "board game") {
-            cout << "Loại quà không hợp lệ!" << endl;
-            return false;
-        }
-        membershipPoints -= 100;//Trừ 100 điểm khỏi số điểm tích lũy hiện tại
-        cout << "Đổi quà thành công!" << endl;
-        cout << "Quà tặng: " << giftType << endl;
-        cout << "Điểm còn lại: "<< membershipPoints << endl;
-        return true;
-    }
-	// Hiển thị thông tin khách hàng VIP
-    void display() const override {
-        Customer::display();
-        cout << "Hạng khách hàng: VIP" << endl;
-        cout << "Điểm tích lũy: "<< membershipPoints << " điểm" << endl;
-        cout << "Số lượt đổi quà hiện có: "<< membershipPoints / 100 << endl;
     }
 };

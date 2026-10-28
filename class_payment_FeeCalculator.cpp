@@ -1,229 +1,240 @@
 #include <iostream>
-#include <windows.h>
-#include <string>
+#include <string>    
+#include <windows.h> 
 #include "class_Customer_and_Rental.cpp"
-using namespace std;
-
-// Phương thức thanh toán
+using namespace std; 
+// Khai báo các phương thức thanh toán
 enum PaymentMethod {
-	CASH, // Thanh toán tiền mặt
-    BANK_TRANSFER, // Thanh toán chuyển khoản
-    OTHER // Phương thức thanh toán khác
-};
-// Trạng thái thanh toán
-enum PaymentStatus {
-    PENDING, // Đang chờ thanh toán
-    COMPLETED, // Đã thanh toán
-    CANCELLED // Đã hủy thanh toán
+    CASH, // Thanh toán bằng tiền mặt
+    BANK_TRANSFER, // Thanh toán bằng chuyển khoản
+    OTHER_METHOD // Thanh toán bằng phương thức khác
 };
 
-// Lớp tính các khoản phí
+// Khai báo các trạng thái thanh toán                   
+enum PaymentStatus {
+    UNPAID, // Chưa thanh toán
+    PAID, // Đã thanh toán
+    REFUNDED // Đã hoàn tiền
+};
 class FeeCalculator {
+private:
+    double bankTransferVATRate; // Tỷ lệ VAT khi chuyển khoản, mặc định 3%
+    double buybackRate;  // Tỷ lệ của hàng mua lại truyền tranh, mặc định 70%
+
 public:
-    // Tính tiền phí thuê truyện theo ngày
-    double calculateRentalFee(double pricePerDay, int days) {
-        if (pricePerDay < 0 || days < 0) // Kiểm tra thông tin dữ liệu
-            return 0;
-        return pricePerDay * days;
+    // Hàm khởi tạo: tự động chạy khi tạo đối tượng FeeCalculator
+    FeeCalculator() {
+        bankTransferVATRate = 0.03; buybackRate = 0.70;         
     }
-    // Tính tiền phạt trả trễ
-    double calculateLateFee(double feePerDay, int lateDays) {
-        if (feePerDay < 0 || lateDays < 0) // Kiểm tra thông tin dữ liệu
+    // Tính tiền thuê dựa trên sản phẩm được truyền vào
+    // duration là số tháng thuê truyền tranh hoặc số giờ thuê board game
+    double calculateRentalFee(Product* product, int duration) const {
+        if (product == nullptr || duration <= 0)
             return 0;
-        return feePerDay * lateDays;
+        // Gọi hàm tính tiền thuê của sản phẩm cụ thể
+        return product->calculateRentalFee(duration);
     }
-    // Tính tiền bồi thường hư hỏng
-    double calculateDamageFee(double damageFee) {
-        if (damageFee < 0) // Kiểm tra dữ liệu phí hư hỏng
+
+    // Tính phí trễ hạn
+    // lateDays: số ngày trễ    
+    // feePerDay: phí phạt cho mỗi ngày trễ
+    double calculateLateFee(int lateDays, double feePerDay) const {
+        if (lateDays <= 0 || feePerDay <= 0)
+            return 0;
+        return lateDays * feePerDay;
+    }
+
+    // Tính phí hư hỏng
+    // damageFee là mức phí hư hỏng đã được xác định trước
+    double calculateDamageFee(double damageFee) const {
+        if (damageFee <= 0)
             return 0;
         return damageFee;
     }
-    // Tính tổng tiền thuê và các khoản phạt
-    double calculateTotalFee(double rentalFee, double lateFee, double damageFee) {
+    // Tính tổng phí thuê, phí trễ hạn và phí hư hỏng
+    double calculateTotalFee(double rentalFee, double lateFee,
+        double damageFee) const {
+        if (rentalFee < 0) rentalFee = 0;
+        if (lateFee < 0) lateFee = 0;
+        if (damageFee < 0) damageFee = 0;
+
         return rentalFee + lateFee + damageFee;
     }
-    // Tính giá của hàng mua lại bằng 70% giá gốc
-    double calculateBuybackPrice(double originalPrice) {
-        if (originalPrice < 0) // Kiểm tra giá gốc
+    // Tính tiền mua sản phẩm theo số lượng
+    double calculatePurchaseFee(Product* product, int quantity) const {
+        if (product == nullptr || quantity <= 0)
             return 0;
-        return originalPrice * 0.70;
+
+        // Gọi hàm tính tiền mua của sản phẩm cụ thể
+        return product->calculatePurchaseFee(quantity);
+    }
+    // Tính giá của hàng mua lại truyền tranh
+    double calculateBuybackPrice(double originalPrice) const {
+        if (originalPrice <= 0)
+            return 0;
+
+        // Giá mua lại = giá gốc * 70%
+        return originalPrice * buybackRate;
+    }
+    // Tính VAT dựa trên phương thức thanh toán
+    double calculateVAT(double amount, PaymentMethod method) const {
+        if (amount <= 0)
+            return 0;
+
+        // Nếu chuyển khoản thì tính VAT 3%
+        if (method == BANK_TRANSFER)
+            return amount * bankTransferVATRate;
+       // Các phương thức khác không tính VAT theo quy ước này
+        return 0;
+    }
+    // Lấy tỷ lệ VAT hiện tại
+    double getVATRate() const {
+        return bankTransferVATRate;
+    }
+    // Lấy tỷ lệ mua lại hiện tại
+    double getBuybackRate() const {
+        return buybackRate;
     }
 };
-
-// Lớp quản lý thanh toán
 class Payment {
 private:
-    string paymentId; // Mã giao dịch
-    string rentalId; // Mã thuê
-    double amount; // Số tiền trước phí
+    string paymentId; // Mã thanh toán
+    string rentalId; // Mã giao dịch thuê liên quan
+    double amount; // Số tiền gốc, chưa tính VAT
     PaymentMethod method; // Phương thức thanh toán
-    string paymentDate; // Ngày thanh toán
+    Date paymentDate; // Ngày thanh toán
     PaymentStatus status; // Trạng thái thanh toán
+    double vatAmount; // Số tiền VAT
+
 public:
-	// Khởi tạo thanh toán mặc định
-    Payment() {
-        paymentId = ""; // Khởi tạo mã thanh toán rỗng
-        rentalId = ""; // Khởi tạo mã thuê rỗng
-        amount = 0;  // Khởi tạo số tiền bằng 0
-        method = CASH; // Mặc định thanh toán tiền mặt
-        paymentDate = ""; // Khởi tạo ngày thanh toán rỗng
-        status = PENDING;  // Mặc định đang chờ thanh toán
-    }
-    // Khởi tạo thanh toán có thông tin
+    // Hàm khởi tạo đối tượng Payment
     Payment(string pId, string rId, double money,
-        PaymentMethod m, string date) {
+        PaymentMethod m, Date pDate,
+        PaymentStatus s = UNPAID) {
         paymentId = pId; // Gán mã thanh toán
-        rentalId = rId; // Gán mã phiếu thuê
-        amount = (money >= 0) ? money : 0; // Kiểm tra số tiền
-        method = m; // Gán phương thức thanh toán
-        paymentDate = date;  // Gán ngày thanh toán
-        status = PENDING; // Đặt trạng thái cho thanh toán
-    }
-    // Tính phí VAT chuyển khoản 3%
-    double calculateExtraFee() const {
-        if (method == BANK_TRANSFER) // Nếu khách chuyển khoản
-            return amount * 0.03;  // Tính phí VAT 3%
-        return 0; 
-    }
-    // Tính tổng tiền cần thanh toán 
-    double calculateFinalAmount() const {
-        return amount + calculateExtraFee();
-    }
-    // Xác nhận giao dịch thành công
-    void completePayment() {
-        status = COMPLETED;// Cập nhật trạng thái
-    }
-    // Hủy giao dịch
-    void cancelPayment() {
-        status = CANCELLED; // Cập nhật trạng thái hủy
-    }
-    // Hàm trả về mã thanh toán
-    string getPaymentId() const {
-        return paymentId;
-    }
-    // Hàm trả về mã phiếu thuê
-    string getRentalId() const {
-        return rentalId;
-    }
-    // Hàm trả về số tiền ban đầu
-    double getAmount() const {
-        return amount;
-    }
-    // Hàm trả về phí thanh toán
-    double getExtraFee() const {
-        return calculateExtraFee();
-    }
-    // Hàm trả về tổng tiền thanh toán
-    double getFinalAmount() const {
-        return calculateFinalAmount();
-    }
-    // Hàm trả về phương thức thanh toán
-    PaymentMethod getMethod() const {
-        return method;
-    }
-    // Hàm trả về trạng thái thanh toán
-    PaymentStatus getStatus() const {
-        return status;
-    }
-    // Hàm trả về ngày thanh toán
-    string getPaymentDate() const {
-        return paymentDate;
-    }
-    // Hiển thị thông tin thanh toán
-    void displayPayment() const {
-        cout << "\n    THÔNG TIN THANH TOÁN\n"; // Tiêu đề
-        cout << "Mã thanh toán: " << paymentId << endl; // In mã
-        cout << "Mã phiếu thuê: " << rentalId << endl;  // In mã thuê
-        cout << "Ngày thanh toán: " << paymentDate << endl; // In ngày
-        cout << "Số tiền ban đầu: " << amount << " VND\n"; // In tiền gốc
-        cout << "Phụ phí: " << calculateExtraFee() << " VND\n"; // In phí
-        cout << "Tổng tiền: " << calculateFinalAmount() << " VND\n"; // In tổng
+        rentalId = rId; // Gán mã giao dịch thuê
 
-		cout << "Phương thức: "; // In phương thức thanh toán
-		if (method == CASH)         // Thanh toán tiền mặt
-            cout << "Tiền mặt";
-		else if (method == BANK_TRANSFER) // Thanh toán chuyển khoản
-            cout << "Chuyển khoản";
-		else                   // Thanh toán phương thức khác
-            cout << "Khác";
+        // Nếu số tiền không âm thì nhận số tiền đó, ngược lại gán bằng 0
+        amount = (money >= 0) ? money : 0;
 
-        cout << "\nTrang thái: ";// In tiêu đề trạng thái
-		if (status == PENDING)   // Trạng thái đang chờ thanh toán
-            cout << "Chờ thanh toán";
-		else if (status == COMPLETED) // Trạng thái đã thanh toán
-            cout << "Đã thanh toán";
-        else          // Hủy giao dịch
-            cout << "Đã hủy";
+        method = m; // Lưu phương thức thanh toán
+        paymentDate = pDate; // Lưu ngày thanh toán
+        status = s; // Lưu trạng thái ban đầu
+        vatAmount = 0; // Ban đầu chưa tính VAT
+    }
+
+    // Các hàm getter dùng để đọc giá trị thuộc tính private
+    string getPaymentId() const { return paymentId; } // Lấy mã thanh toán
+    string getRentalId() const { return rentalId; } // Lấy mã giao dịch thuê
+    double getAmount() const { return amount; } // Lấy tiền gốc
+    double getVATAmount() const { return vatAmount; } // Lấy tiền VAT
+    PaymentMethod getMethod() const { return method; } // Lấy phương thức
+    PaymentStatus getStatus() const { return status; } // Lấy trạng thái
+
+    // Tính tổng số tiền phải thanh toán
+    double getTotalAmount() const {
+        return amount + vatAmount; // Tiền gốc + VAT
+    }
+
+    // Thực hiện thanh toán
+    void makePayment(const FeeCalculator& calculator) {
+        // Nhớ FeeCalculator tính VAT theo số tiền và phương thức
+        vatAmount = calculator.calculateVAT(amount, method);
+
+        // Cập nhật trạng thái thành đã thanh toán
+        status = PAID;
+    }
+    // Cập nhật trạng thái giao dịch thành đã hoàn tiền
+    void refundPayment() {
+        status = REFUNDED;
+    }
+    // Hiển thị thông tin thanh toán    
+    void display() const {
+        cout << "\nTHÔNG TIN THANH TOÁN:" << endl;
+        cout << "Mã thanh toán: " << paymentId << endl; // In mã thanh toán
+		cout << "Mã giao dịch: " << rentalId << endl; // In mã giao dịch thuê
+        cout << "Tiền gốc: " << amount << " VND" << endl; // In tiền gốc
+        // Hiển thị phương thức thanh toán
+        cout << "Phương thức: ";
+        if (method == CASH)
+            cout << "Tiền mặt" << endl;
+        else if (method == BANK_TRANSFER)
+            cout << "Chuyển khoản" << endl;
+        else
+            cout << "Phương thức khác" << endl;
+        // Hiển thị tiền VAT và tổng tiền
+        cout << "VAT: " << vatAmount << " VND" << endl;
+        cout << "Tổng thanh toán: " << getTotalAmount() << " VND" << endl;
+        // Hiển thị ngày thanh toán
+        cout << "Ngày thanh toán: ";
+        paymentDate.display();
         cout << endl;
+        // Hiển thị trạng thái thanh toán
+        cout << "Trạng thái: ";
+        if (status == UNPAID)
+            cout << "Chưa thanh toán" << endl;
+        else if (status == PAID)
+            cout << "Đã thanh toán" << endl;
+        else
+            cout << "Đã hoàn tiền" << endl;
     }
 };
-
-// Lớp thống kê các khoản thu chi
-class MoneyStatistics {
+class PaymentStatistics {
 private:
-    double rentalIncome; // Tổng tiền thuê
-	double lateIncome; // Tổng tiền phạt trả trễ
-    double damageIncome; // Tổng tiền bồi thường
-    double extraFeeIncome; // Tổng phí thanh toán
-    double buybackExpense; // Tổng tiền chi mua lại truyện và board game
-    int completedPayments; // Số giao dịch thành công
+    int transactionCount; // Số giao dịch đã thanh toán
+    double totalBaseAmount; // Tổng tiền gốc trước VAT
+    double totalVAT; // Tổng tiền VAT
+    double totalCollected; // Tổng tiền thu được cả VAT
+    double cashCollected; // Tổng tiền thu bằng tiền mặt
+    double bankTransferCollected; // Tổng tiền thu bằng chuyển khoản
+    double otherCollected; // Tổng tiền thu bằng cách khác
+
 public:
-	// Khởi tạo thống kê tiền mặc định
-    MoneyStatistics() {
-        rentalIncome = 0;// Tiền thuê ban đầu bằng 0
-		lateIncome = 0;  // Tiền phạt ban đầu bằng 0
-		damageIncome = 0;// Tiền bồi thường ban đầu bằng 0
-		extraFeeIncome = 0; // Phụ phí ban đầu bằng 0
-        buybackExpense = 0;  // Chi mua lại truyện và board game ban đầu bằng 0
-        completedPayments = 0; // Giao dịch thành công ban đầu bằng 0
+    // Hàm khởi tạo: ban đầu tất cả số liệu bằng 0
+    PaymentStatistics() {
+        transactionCount = 0;
+        totalBaseAmount = 0;
+        totalVAT = 0;
+        totalCollected = 0;
+        cashCollected = 0;
+        bankTransferCollected = 0;
+        otherCollected = 0;
     }
-    // Gọi hàm doanh thu tiền thuê
-    void addRentalIncome(double amount) {
-        if (amount > 0)   // Kiểm tra số tiền
-            rentalIncome += amount;
+
+    // Ghi nhận một giao dịch vao thống kê
+    void recordPayment(const Payment& payment) {
+        // Nếu giao dịch chưa thanh toán hoặc đã hoàn tiền thì bỏ qua
+        if (payment.getStatus() != PAID)
+            return;
+        // Tăng số giao dịch đã thanh toán
+        transactionCount++;
+
+        // Cộng tiền gốc vào tổng tiền trước VAT
+        totalBaseAmount += payment.getAmount();
+
+        // Cộng VAT vào tổng VAT
+        totalVAT += payment.getVATAmount();
+
+        // Cộng tổng tiền đã thu, bao gồm VAT
+        totalCollected += payment.getTotalAmount();
+
+        // Cộng tiền vào nhóm phương thức thanh toán tương ứng
+        if (payment.getMethod() == CASH)
+            cashCollected += payment.getTotalAmount();
+        else if (payment.getMethod() == BANK_TRANSFER)
+            bankTransferCollected += payment.getTotalAmount();
+        else
+            otherCollected += payment.getTotalAmount();
     }
-	// Gọi hàm doanh thu tiền phạt trả trễ
-    void addLateIncome(double amount) {
-        if (amount > 0)  // Kiểm tra số tiền
-            lateIncome += amount; 
-    }
-    // Gọi hàm doanh thu bồi thường
-    void addDamageIncome(double amount) {
-        if (amount > 0)  // Kiểm tra số tiền
-            damageIncome += amount;
-    }
-	// Gọi hàm doanh thu phụ phí thanh toán
-    void addExtraFeeIncome(double amount) {
-        if (amount > 0)  // Kiểm tra số tiền
-            extraFeeIncome += amount;
-    }
-    // Gọi hàm chi phí mua lại truyện
-    void addBuybackExpense(double amount) {
-        if (amount > 0)  // Kiểm tra số tiền
-            buybackExpense += amount;
-    }
-	// Gọi hàm tăng số giao dịch thành công
-    void addCompletedPayment() {
-        completedPayments++;
-    }
-	// Gọi hàm tính tổng các khoản thu
-    double calculateTotalIncome() const {
-        return rentalIncome + lateIncome + damageIncome + extraFeeIncome;
-    }
-    // Tính số tiền thu được sau khi trừ tiền mua lại
-    double calculateNetIncome() const {
-        return calculateTotalIncome() - buybackExpense;
-    }
-    // Hiển thị báo cáo thu chi
+    // Hiển thị báo cáo thống kê
     void displayStatistics() const {
-        cout << "\n   THỐNG KÊ THU CHI\n";
-		cout << "Tiền thuê: " << rentalIncome << " VND\n"; // In tiền thuê
-		cout << "Tiền phạt trả trễ: " << lateIncome << " VND\n"; // In tiền phạt trả trễ
-		cout << "Tiền bồi thường: " << damageIncome << " VND\n"; // In tiền bồi thường
-		cout << "Phụ phí: " << extraFeeIncome << " VND\n"; // In phụ phí thanh toán
-        cout << "Tiền chi mua lại: " << buybackExpense << " VND\n"; // In chi phí mua lại
-        cout << "Giao dịch thành công: "<< completedPayments << endl; // In số giao dịch
-        cout << "Tổng các khoản thu: "<< calculateTotalIncome() << " VND\n"; // In tổng doanh thu
-        cout << "Tổng thu sau khi trừ chi phí mua lại: "<< calculateNetIncome() << " VND\n"; // In tổng tiền thu sau khi trừ chi phí mua lại
+        cout << "\nTHÔNG KÊ THANH TOÁN:" << endl;
+        cout << "Số giao dịch đã thanh toán: "<< transactionCount << endl;
+        cout << "Tổng tiền trước VAT: " << totalBaseAmount << " VND" << endl;
+        cout << "Tổng VAT: " << totalVAT << " VND" << endl;
+        cout << "Tổng tiền thu được: " << totalCollected << " VND" << endl;
+        cout << "Thu bằng tiền mặt: " << cashCollected << " VND" << endl;
+        cout << "Thu bằng chuyển khoản: "<< bankTransferCollected << " VND" << endl;
+        cout << "Thu bằng cách khác: " << otherCollected << " VND" << endl;
     }
 };

@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>    
 #include <windows.h> 
+#include "class_book_and_boardgame_docfile.cpp"
 #include "class_Customer_and_Rental.cpp"
 using namespace std; 
 // Khai báo các phương thức thanh toán

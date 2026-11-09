@@ -7,9 +7,117 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cctype>
-#include <ctime>
+#include <sstream>
+#include <algorithm>
 #include "class_payment_FeeCalculator.cpp" // đã gồm sẵn 2 file class còn lại
+#include "data_structures.cpp"
 using namespace std;
+
+// ============================================================
+// CAC HAM KIEM TRA VA XU LY DU LIEU DAU VAO
+// ============================================================
+
+bool laNamNhuan(int nam) {
+    return (nam % 400 == 0) || (nam % 4 == 0 && nam % 100 != 0);
+}
+
+int soNgayTrongThang(int thang, int nam) {
+    static const int soNgay[] = {
+        31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
+    };
+    if (thang < 1 || thang > 12) return 0;
+    if (thang == 2 && laNamNhuan(nam)) return 29;
+    return soNgay[thang - 1];
+}
+
+bool ngayHopLe(int ngay, int thang, int nam) {
+    if (nam < 1970 || nam > 9999 || thang < 1 || thang > 12) return false;
+    return ngay >= 1 && ngay <= soNgayTrongThang(thang, nam);
+}
+
+// Doc ngay dd/mm/yyyy hoac dd-mm-yyyy; khong chap nhan ky tu thua.
+bool docNgay(const string& chuoi, int& ngay, int& thang, int& nam) {
+    istringstream input(chuoi);
+    char dau1 = '\0', dau2 = '\0';
+    if (!(input >> ngay >> dau1 >> thang >> dau2 >> nam)) return false;
+    input >> ws;
+    if (!input.eof()) return false;
+    if ((dau1 != '/' && dau1 != '-') || dau2 != dau1) return false;
+    return ngayHopLe(ngay, thang, nam);
+}
+
+// So ngay tu mot moc co dinh theo lich Gregorian; khong phu thuoc gio he thong/DST.
+long long ngayThanhSo(int nam, int thang, int ngay) {
+    nam -= (thang <= 2);
+    const int era = (nam >= 0 ? nam : nam - 399) / 400;
+    const unsigned yoe = static_cast<unsigned>(nam - era * 400);
+    const int thangDaDoi = thang + (thang > 2 ? -3 : 9);
+    const unsigned doy = static_cast<unsigned>((153 * thangDaDoi + 2) / 5 + ngay - 1);
+    const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return static_cast<long long>(era) * 146097 + doe;
+}
+
+Date congThang(const Date& ngayBatDau, int soThang) {
+    int tongThang = ngayBatDau.getYear() * 12 + (ngayBatDau.getMonth() - 1) + soThang;
+    int namMoi = tongThang / 12;
+    int thangMoi = tongThang % 12 + 1;
+    int ngayMoi = ngayBatDau.getDay();
+    int ngayToiDa = soNgayTrongThang(thangMoi, namMoi);
+    if (ngayMoi > ngayToiDa) ngayMoi = ngayToiDa;
+    return Date(ngayMoi, thangMoi, namMoi);
+}
+
+bool docSoNguyen(const string& chuoi, int& giaTri) {
+    istringstream input(chuoi);
+    input >> ws;
+    if (!(input >> giaTri)) return false;
+    input >> ws;
+    return input.eof();
+}
+
+bool docCoKhong(const string& chuoi, bool macDinh = true) {
+    if (chuoi.empty()) return macDinh;
+    string giaTri = chuoi;
+    transform(giaTri.begin(), giaTri.end(), giaTri.begin(),
+              [](unsigned char c) { return static_cast<char>(tolower(c)); });
+    return giaTri == "yes" || giaTri == "y" || giaTri == "true" || giaTri == "1";
+}
+
+int timViTriSanPham(const vector<Product*>& dsSanPham, const string& maSanPham) {
+    for (size_t i = 0; i < dsSanPham.size(); ++i) {
+        if (dsSanPham[i] != nullptr && dsSanPham[i]->getProductID() == maSanPham) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+int timViTriPhieu(const vector<Rental*>& dsPhieu, const string& maPhieu) {
+    for (size_t i = 0; i < dsPhieu.size(); ++i) {
+        if (dsPhieu[i] != nullptr && dsPhieu[i]->getRentalId() == maPhieu) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+int timViTriKhachHang(const vector<Customer*>& dsKhachHang, const string& maKhachHang) {
+    for (size_t i = 0; i < dsKhachHang.size(); ++i) {
+        if (dsKhachHang[i] != nullptr && dsKhachHang[i]->getCustomerId() == maKhachHang) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+int timViTriThanhToan(const vector<Payment*>& dsThanhToan, const string& maThanhToan) {
+    for (size_t i = 0; i < dsThanhToan.size(); ++i) {
+        if (dsThanhToan[i] != nullptr && dsThanhToan[i]->getPaymentId() == maThanhToan) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
 
 int main() {
     SetConsoleOutputCP(CP_UTF8); // hiển thị được tiếng Việt trên console
@@ -25,6 +133,8 @@ int main() {
     vector<double> dsPhiTre;       // phí trễ hạn mỗi ngày
     vector<double> dsPhiHuNhe;     // phí hư hỏng nhẹ
     vector<double> dsPhiHuNang;    // phí hư hỏng nặng
+    vector<bool> dsChoThue;        // sản phẩm có được phép cho thuê theo CSV hay không
+    vector<bool> dsChoBan;         // sản phẩm có được phép bán theo CSV hay không
     vector<Customer*> dsKhachHang; // danh sách khách hàng (thường và VIP)
     vector<Rental*> dsPhieu;       // danh sách phiếu thuê / mua
     vector<double> dsSoTien;       // số tiền cần thanh toán của từng phiếu, cùng vị trí với dsPhieu
@@ -58,7 +168,12 @@ int main() {
             // Các cột dùng chung của cả 2 loại sản phẩm
             string id = layGiaTri(cot, tenCot, "product_id");
             string ten = layGiaTri(cot, tenCot, "display_name");
+            if (id.empty() || ten.empty()) {
+                cout << "Bo qua dong CSV khong co ma hoac ten san pham trong " << tenFile << endl;
+                continue;
+            }
             int soLuong = docSo(layGiaTri(cot, tenCot, "quantity"));
+            if (soLuong < 0) soLuong = 0;
             ProductStatus trangThai = docTrangThai(layGiaTri(cot, tenCot, "status"));
             string nxb = layGiaTri(cot, tenCot, "publisher");
             double giaThue = docSo(layGiaTri(cot, tenCot, "rental_price_vnd"));
@@ -75,6 +190,8 @@ int main() {
             dsPhiTre.push_back(docSo(layGiaTri(cot, tenCot, "late_fee_vnd_per_day")));
             dsPhiHuNhe.push_back(docSo(layGiaTri(cot, tenCot, "damage_fee_minor_vnd")));
             dsPhiHuNang.push_back(docSo(layGiaTri(cot, tenCot, "damage_fee_major_vnd")));
+            dsChoThue.push_back(docCoKhong(layGiaTri(cot, tenCot, "rental_available"), true));
+            dsChoBan.push_back(docCoKhong(layGiaTri(cot, tenCot, "sale_available"), f == 0));
         }
         file.close();
     }
@@ -104,11 +221,19 @@ int main() {
         cout << " 12. Thanh toán" << endl;
         cout << " 13. Hoàn tiền" << endl;
         cout << " 14. Thống kê thanh toán" << endl;
+        cout << " --- CẤU TRÚC DỮ LIỆU ---" << endl;
+        cout << " 15. Demo Linked List" << endl;
+        cout << " 16. Demo Stack" << endl;
+        cout << " 17. Demo Queue" << endl;
+        cout << " 18. Demo Map" << endl;
+        cout << " 19. Demo BST" << endl;
+        cout << " 20. Tìm kiếm sản phẩm" << endl;
+        cout << " 21. Sắp xếp sản phẩm" << endl;
         cout << "  0. Thoát" << endl;
         cout << "Chọn chức năng: ";
         if (!getline(cin, s)) // hết dữ liệu nhập thì thoát
             break;
-        chon = (s.empty() || !isdigit((unsigned char)s[0])) ? -1 : atoi(s.c_str());
+        if (!docSoNguyen(s, chon)) chon = -1;
 
         switch (chon) {
 
@@ -162,10 +287,7 @@ int main() {
             case 3: {
                 cout << "Mã truyện tranh (VD: CB00101): ";
                 getline(cin, s);
-                int sp = -1; // vị trí sản phẩm trong dsSanPham
-                for (size_t i = 0; i < dsSanPham.size(); i++)
-                    if (dsSanPham[i]->getProductID() == s)
-                        sp = (int)i;
+                int sp = timViTriSanPham(dsSanPham, s);
                 if (sp == -1 || dynamic_cast<ComicBook*>(dsSanPham[sp]) == nullptr) {
                     cout << "Không tìm thấy truyện tranh có mã này!" << endl;
                     break;
@@ -206,10 +328,7 @@ int main() {
             case 5: {
                 cout << "Mã khách hàng cần sửa (VD: KH001): ";
                 getline(cin, s);
-                int kh = -1; // vị trí khách hàng trong dsKhachHang
-                for (size_t i = 0; i < dsKhachHang.size(); i++)
-                    if (dsKhachHang[i]->getCustomerId() == s)
-                        kh = (int)i;
+                int kh = timViTriKhachHang(dsKhachHang, s); // vị trí khách hàng
                 if (kh == -1) {
                     cout << "Không tìm thấy khách hàng!" << endl;
                     break;
@@ -248,10 +367,7 @@ int main() {
                 // Chọn khách hàng và sản phẩm
                 cout << "Mã khách hàng (VD: KH001): ";
                 getline(cin, s);
-                int kh = -1; // vị trí khách hàng trong dsKhachHang
-                for (size_t i = 0; i < dsKhachHang.size(); i++)
-                    if (dsKhachHang[i]->getCustomerId() == s)
-                        kh = (int)i;
+                int kh = timViTriKhachHang(dsKhachHang, s);
                 cout << "Mã sản phẩm (VD: CB00101, BG0001): ";
                 getline(cin, s);
                 int sp = -1; // vị trí sản phẩm trong dsSanPham
@@ -260,6 +376,10 @@ int main() {
                         sp = (int)i;
                 if (kh == -1 || sp == -1) {
                     cout << "Không tìm thấy khách hàng hoặc sản phẩm!" << endl;
+                    break;
+                }
+                if (static_cast<size_t>(sp) >= dsChoThue.size() || !dsChoThue[sp]) {
+                    cout << "San pham nay duoc danh dau khong cho thue trong file CSV!" << endl;
                     break;
                 }
                 if (dsSanPham[sp]->getStatus() != AVAILABLE || dsSanPham[sp]->getQuantity() <= 0) {
@@ -272,35 +392,22 @@ int main() {
                 int d = 0, m = 0, y = 0;
                 cout << "Ngày thuê (dd/mm/yyyy): ";
                 getline(cin, s);
-                if (sscanf(s.c_str(), "%d%*[/ ]%d%*[/ ]%d", &d, &m, &y) != 3 || d < 1 || d > 31 || m < 1 || m > 12 || y < 1970) {
-                    cout << "Ngày không hợp lệ!" << endl;
+                if (!docNgay(s, d, m, y)) {
+                    cout << "Ngay khong hop le. Hay nhap dd/mm/yyyy." << endl;
                     break;
                 }
                 cout << (laTruyen ? "Số tháng thuê (1-12): " : "Số giờ thuê (1-12): ");
                 getline(cin, s);
-                int thoiGian = atoi(s.c_str());
-                if (thoiGian < 1 || thoiGian > 12) {
+                int thoiGian = 0;
+                if (!docSoNguyen(s, thoiGian) || thoiGian < 1 || thoiGian > 12) {
                     cout << "Thời gian thuê không hợp lệ!" << endl;
                     break;
                 }
 
-                // Tính hạn trả: truyện tranh = ngày thuê + số tháng,
-                // board game thuê theo giờ nên phải trả trong ngày
-                tm han = tm();
-                han.tm_mday = d;
-                han.tm_mon = m - 1;
-                han.tm_year = y - 1900;
-                han.tm_hour = 12;
-                if (laTruyen) {
-                    han.tm_mon += thoiGian;
-                    mktime(&han); // tự chuẩn hóa tháng / năm (VD: tháng 14 thành tháng 2 năm sau)
-                    if (han.tm_mday != d) { // ngày bị tràn sang tháng sau (VD: 31/01 + 1 tháng) thì lùi về ngày cuối tháng
-                        han.tm_mday = 0;
-                        mktime(&han);
-                    }
-                }
+                // Truyện tranh: hạn trả sau N tháng (nếu ngày không tồn tại ở tháng đích,
+                // dùng ngày cuối tháng). Board game: thời hạn thuê theo giờ trong cùng ngày.
                 Date ngayThue(d, m, y);
-                Date hanTra(han.tm_mday, han.tm_mon + 1, han.tm_year + 1900);
+                Date hanTra = laTruyen ? congThang(ngayThue, thoiGian) : ngayThue;
 
                 // Tính phí thuê và tạo phiếu
                 double tienThue = tinhPhi.calculateRentalFee(dsSanPham[sp], thoiGian); // FeeCalculator tính phí thuê
@@ -320,36 +427,35 @@ int main() {
             case 8: {
                 cout << "Mã khách hàng (VD: KH001): ";
                 getline(cin, s);
-                int kh = -1;
-                for (size_t i = 0; i < dsKhachHang.size(); i++)
-                    if (dsKhachHang[i]->getCustomerId() == s)
-                        kh = (int)i;
+                int kh = timViTriKhachHang(dsKhachHang, s);
                 cout << "Mã truyện tranh (VD: CB00101): ";
                 getline(cin, s);
-                int sp = -1;
-                for (size_t i = 0; i < dsSanPham.size(); i++)
-                    if (dsSanPham[i]->getProductID() == s)
-                        sp = (int)i;
+                int sp = timViTriSanPham(dsSanPham, s);
                 if (kh == -1 || sp == -1) {
                     cout << "Không tìm thấy khách hàng hoặc sản phẩm!" << endl;
                     break;
                 }
-                if (tinhPhi.calculatePurchaseFee(dsSanPham[sp], 1) <= 0) { // board game không bán nên phí mua = 0
-                    cout << "Sản phẩm này không bán (board game chỉ cho thuê)!" << endl;
+                if (static_cast<size_t>(sp) >= dsChoBan.size() || !dsChoBan[sp] ||
+                    tinhPhi.calculatePurchaseFee(dsSanPham[sp], 1) <= 0) {
+                    cout << "Sản phẩm này không được phép bán!" << endl;
+                    break;
+                }
+                if (dsSanPham[sp]->getStatus() != AVAILABLE || dsSanPham[sp]->getQuantity() <= 0) {
+                    cout << "Sản phẩm hiện không ở trạng thái sẵn sàng để bán!" << endl;
                     break;
                 }
                 cout << "Số lượng mua (tối đa " << dsSanPham[sp]->getQuantity() << "): ";
                 getline(cin, s);
-                int soLuong = atoi(s.c_str());
-                if (soLuong < 1 || soLuong > dsSanPham[sp]->getQuantity()) {
+                int soLuong = 0;
+                if (!docSoNguyen(s, soLuong) || soLuong < 1 || soLuong > dsSanPham[sp]->getQuantity()) {
                     cout << "Số lượng không hợp lệ!" << endl;
                     break;
                 }
                 int d = 0, m = 0, y = 0;
                 cout << "Ngày mua (dd/mm/yyyy): ";
                 getline(cin, s);
-                if (sscanf(s.c_str(), "%d%*[/ ]%d%*[/ ]%d", &d, &m, &y) != 3 || d < 1 || d > 31 || m < 1 || m > 12 || y < 1970) {
-                    cout << "Ngày không hợp lệ!" << endl;
+                if (!docNgay(s, d, m, y)) {
+                    cout << "Ngay khong hop le. Hay nhap dd/mm/yyyy." << endl;
                     break;
                 }
                 Date ngayMua(d, m, y);
@@ -367,10 +473,7 @@ int main() {
             case 9: {
                 cout << "Mã phiếu cần trả (VD: GD001): ";
                 getline(cin, s);
-                int pi = -1; // vị trí phiếu trong dsPhieu
-                for (size_t i = 0; i < dsPhieu.size(); i++)
-                    if (dsPhieu[i]->getRentalId() == s)
-                        pi = (int)i;
+                int pi = timViTriPhieu(dsPhieu, s); // vị trí phiếu trong dsPhieu
                 if (pi == -1) {
                     cout << "Không tìm thấy phiếu!" << endl;
                     break;
@@ -383,44 +486,46 @@ int main() {
                 int d = 0, m = 0, y = 0;
                 cout << "Ngày trả thực tế (dd/mm/yyyy): ";
                 getline(cin, s);
-                if (sscanf(s.c_str(), "%d%*[/ ]%d%*[/ ]%d", &d, &m, &y) != 3 || d < 1 || d > 31 || m < 1 || m > 12 || y < 1970) {
-                    cout << "Ngày không hợp lệ!" << endl;
+                if (!docNgay(s, d, m, y)) {
+                    cout << "Ngay khong hop le. Hay nhap dd/mm/yyyy." << endl;
                     break;
                 }
-                // Ngày trả không được trước ngày thuê (đổi ngày thành số dạng yyyymmdd để so sánh)
+                // Ngày trả không được trước ngày thuê.
                 Date ngayThue = phieu->getRentalDate();
-                if (y * 10000 + m * 100 + d < ngayThue.getYear() * 10000 + ngayThue.getMonth() * 100 + ngayThue.getDay()) {
+                if (ngayThanhSo(y, m, d) < ngayThanhSo(ngayThue.getYear(), ngayThue.getMonth(), ngayThue.getDay())) {
                     cout << "Ngày trả không được trước ngày thuê!" << endl;
                     break;
                 }
 
-                // Số ngày trễ = ngày trả thực tế - hạn trả.
-                // Đổi hai ngày sang kiểu thời gian (mktime) rồi trừ nhau ra số giây, chia 86400 ra số ngày
+                // Số ngày trễ = số ngày lịch giữa ngày trả và hạn trả.
                 Date hanTra = phieu->getDueDate();
-                tm han = tm();
-                tm tra = tm();
-                han.tm_mday = hanTra.getDay();
-                han.tm_mon = hanTra.getMonth() - 1;
-                han.tm_year = hanTra.getYear() - 1900;
-                han.tm_hour = 12;
-                tra.tm_mday = d;
-                tra.tm_mon = m - 1;
-                tra.tm_year = y - 1900;
-                tra.tm_hour = 12;
-                int soNgayTre = (int)(difftime(mktime(&tra), mktime(&han)) / 86400 + 0.5);
-                if (soNgayTre < 0)
-                    soNgayTre = 0; // trả đúng hạn hoặc sớm hơn thì không bị phạt
+                long long chenhlechNgay = ngayThanhSo(y, m, d) -
+                    ngayThanhSo(hanTra.getYear(), hanTra.getMonth(), hanTra.getDay());
+                int soNgayTre = chenhlechNgay > 0 ? static_cast<int>(chenhlechNgay) : 0;
 
-                // Tìm vị trí sản phẩm trong dsSanPham để lấy mức phí riêng của sản phẩm đó
-                int sp = 0;
-                for (size_t i = 0; i < dsSanPham.size(); i++)
-                    if (dsSanPham[i] == phieu->getProduct())
-                        sp = (int)i;
-                double phiTre = tinhPhi.calculateLateFee(soNgayTre, dsPhiTre[sp]); // phí trễ = số ngày trễ x phí mỗi ngày
+                // Tìm mức phí riêng của sản phẩm trên các mảng song song.
+                int sp = -1;
+                for (size_t i = 0; i < dsSanPham.size(); ++i) {
+                    if (dsSanPham[i] == phieu->getProduct()) {
+                        sp = static_cast<int>(i);
+                        break;
+                    }
+                }
+                if (sp < 0 || static_cast<size_t>(sp) >= dsPhiTre.size() ||
+                    static_cast<size_t>(sp) >= dsPhiHuNhe.size() ||
+                    static_cast<size_t>(sp) >= dsPhiHuNang.size()) {
+                    cout << "Khong tim duoc bang phi cua san pham; chua cap nhat phieu tra." << endl;
+                    break;
+                }
+                double phiTre = tinhPhi.calculateLateFee(soNgayTre, dsPhiTre[sp]);
 
                 cout << "Tình trạng sản phẩm khi trả (1: Bình thường, 2: Hư hỏng nhẹ, 3: Hư hỏng nặng): ";
                 getline(cin, s);
-                double phiHuHong = 0; // mặc định không hư hỏng
+                if (s != "1" && s != "2" && s != "3") {
+                    cout << "Lua chon tinh trang khong hop le; chua cap nhat phieu tra." << endl;
+                    break;
+                }
+                double phiHuHong = 0;
                 if (s == "2")
                     phiHuHong = tinhPhi.calculateDamageFee(dsPhiHuNhe[sp]);
                 else if (s == "3")
@@ -441,15 +546,16 @@ int main() {
                 int d = 0, m = 0, y = 0;
                 cout << "Ngày kiểm tra (dd/mm/yyyy): ";
                 getline(cin, s);
-                if (sscanf(s.c_str(), "%d%*[/ ]%d%*[/ ]%d", &d, &m, &y) != 3 || d < 1 || d > 31 || m < 1 || m > 12 || y < 1970) {
-                    cout << "Ngày không hợp lệ!" << endl;
+                if (!docNgay(s, d, m, y)) {
+                    cout << "Ngay khong hop le. Hay nhap dd/mm/yyyy." << endl;
                     break;
                 }
-                int homNay = y * 10000 + m * 100 + d; // đổi ngày thành số dạng yyyymmdd để so sánh
+                long long homNay = ngayThanhSo(y, m, d);
                 int dem = 0; // số phiếu bị chuyển sang quá hạn
                 for (size_t i = 0; i < dsPhieu.size(); i++) {
                     Date han = dsPhieu[i]->getDueDate();
-                    if (dsPhieu[i]->getStatus() == RENTING && homNay > han.getYear() * 10000 + han.getMonth() * 100 + han.getDay()) {
+                    if (dsPhieu[i]->getStatus() == RENTING &&
+                        homNay > ngayThanhSo(han.getYear(), han.getMonth(), han.getDay())) {
                         dsPhieu[i]->setOverdue(); // class Rental: đổi trạng thái từ RENTING sang OVERDUE
                         dem++;
                     }
@@ -489,10 +595,7 @@ int main() {
             case 12: {
                 cout << "Mã phiếu cần thanh toán (VD: GD001): ";
                 getline(cin, s);
-                int pi = -1;
-                for (size_t i = 0; i < dsPhieu.size(); i++)
-                    if (dsPhieu[i]->getRentalId() == s)
-                        pi = (int)i;
+                int pi = timViTriPhieu(dsPhieu, s);
                 if (pi == -1) {
                     cout << "Không tìm thấy phiếu!" << endl;
                     break;
@@ -514,11 +617,14 @@ int main() {
                 cout << "Số tiền cần thanh toán: " << dsSoTien[pi] << " VND" << endl;
                 cout << "Phương thức (1: Tiền mặt, 2: Chuyển khoản - VAT 3%, 3: Khác): ";
                 getline(cin, s);
-                PaymentMethod pt = CASH;
-                if (s == "2")
-                    pt = BANK_TRANSFER;
-                else if (s == "3")
-                    pt = OTHER_METHOD;
+                PaymentMethod pt;
+                if (s == "1") pt = CASH;
+                else if (s == "2") pt = BANK_TRANSFER;
+                else if (s == "3") pt = OTHER_METHOD;
+                else {
+                    cout << "Phuong thuc thanh toan khong hop le; giao dich chua duoc tao." << endl;
+                    break;
+                }
 
                 // Ngày thanh toán = ngày trả (phiếu thuê) hoặc ngày mua (phiếu mua)
                 Date ngayTT = (phieu->getStatus() == RETURNED) ? phieu->getReturnDate() : phieu->getRentalDate();
@@ -541,10 +647,7 @@ int main() {
             case 13: {
                 cout << "Mã thanh toán cần hoàn (VD: TT001): ";
                 getline(cin, s);
-                int ti = -1; // vị trí thanh toán trong dsThanhToan
-                for (size_t i = 0; i < dsThanhToan.size(); i++)
-                    if (dsThanhToan[i]->getPaymentId() == s)
-                        ti = (int)i;
+                int ti = timViTriThanhToan(dsThanhToan, s); // vị trí thanh toán
                 if (ti == -1) {
                     cout << "Không tìm thấy thanh toán!" << endl;
                     break;
@@ -567,12 +670,257 @@ int main() {
                 break;
             }
 
+            // ---------- 15. Demo Linked List ----------
+            case 15: {
+                LinkedListString ll;
+                cout << "=== Demo Linked List ===" << endl;
+                ll.insertFront("Doraemon");
+                ll.insertFront("One Piece");
+                ll.insertBack("Naruto");
+                ll.insertBack("Dragon Ball");
+                ll.display();
+                cout << "Kích thước: " << ll.getSize() << endl;
+                cout << "Chứa 'Naruto': " << (ll.contains("Naruto") ? "Có" : "Không") << endl;
+                ll.remove("One Piece");
+                cout << "Sau khi xóa 'One Piece':" << endl;
+                ll.display();
+                break;
+            }
+
+            // ---------- 16. Demo Stack ----------
+            case 16: {
+                StackInt st;
+                cout << "=== Demo Stack ===" << endl;
+                st.push(10);
+                st.push(20);
+                st.push(30);
+                st.display();
+                int val;
+                if (st.topValue(val)) {
+                    cout << "Top: " << val << endl;
+                }
+                if (st.pop(val)) {
+                    cout << "Pop: " << val << endl;
+                }
+                st.display();
+                break;
+            }
+
+            // ---------- 17. Demo Queue ----------
+            case 17: {
+                QueueString q;
+                cout << "=== Demo Queue ===" << endl;
+                q.enqueue("Khách 1");
+                q.enqueue("Khách 2");
+                q.enqueue("Khách 3");
+                q.display();
+                string val;
+                if (q.dequeue(val)) {
+                    cout << "Dequeue: " << val << endl;
+                }
+                q.display();
+                break;
+            }
+
+            // ---------- 18. Demo Map ----------
+            case 18: {
+                SimpleMapStringInt mp;
+                cout << "=== Demo Map ===" << endl;
+                mp.insert("CB00101", 48000);
+                mp.insert("CB00102", 55000);
+                mp.insert("BG0001", 950000);
+                mp.display();
+                int gia;
+                if (mp.find("CB00101", gia)) {
+                    cout << "Giá CB00101: " << gia << " VND" << endl;
+                }
+                cout << "Kích thước: " << mp.getSize() << endl;
+                break;
+            }
+
+            // ---------- 19. Demo BST ----------
+            case 19: {
+                BinarySearchTreeInt bst;
+                cout << "=== Demo Binary Search Tree ===" << endl;
+                bst.insert(50);
+                bst.insert(30);
+                bst.insert(70);
+                bst.insert(20);
+                bst.insert(40);
+                bst.insert(60);
+                bst.insert(80);
+                bst.display();
+                cout << "Chứa 40: " << (bst.contains(40) ? "Có" : "Không") << endl;
+                cout << "Kích thước: " << bst.getSize() << endl;
+                break;
+            }
+
+            // ---------- 20. Tìm kiếm sản phẩm ----------
+            case 20: {
+                cout << "=== Tìm kiếm sản phẩm ===" << endl;
+                if (dsSanPham.empty()) {
+                    cout << "Chua co san pham de tim kiem." << endl;
+                    break;
+                }
+                // Tạo mảng mã tạm; không làm thay đổi thứ tự danh sách sản phẩm gốc.
+                vector<string> dsID;
+                dsID.reserve(dsSanPham.size());
+                for (size_t i = 0; i < dsSanPham.size(); ++i) {
+                    if (dsSanPham[i] != nullptr) dsID.push_back(dsSanPham[i]->getProductID());
+                }
+                int n = static_cast<int>(dsID.size());
+                
+                cout << "Chọn phương pháp tìm kiếm:" << endl;
+                cout << " 1. Tìm kiếm tuyến tính" << endl;
+                cout << " 2. Tìm kiếm nhị phân (cần sắp xếp trước)" << endl;
+                cout << "Lựa chọn: ";
+                getline(cin, s);
+                
+                cout << "Nhập mã sản phẩm cần tìm: ";
+                string maTim;
+                getline(cin, maTim);
+                
+                int viTri = -1;
+                if (s == "1") {
+                    viTri = linearSearchString(dsID.empty() ? nullptr : &dsID[0], n, maTim);
+                    cout << "Tìm kiếm tuyến tính: ";
+                } else if (s == "2") {
+                    // Sắp xếp trước khi tìm nhị phân
+                    bubbleSortString(dsID.empty() ? nullptr : &dsID[0], n);
+                    viTri = binarySearchString(dsID.empty() ? nullptr : &dsID[0], n, maTim);
+                    cout << "Tìm kiếm nhị phân: ";
+                } else {
+                    cout << "Phương pháp không hợp lệ!" << endl;
+                    break;
+                }
+                
+                if (viTri != -1) {
+                    cout << "Tìm thấy trong mảng mã tạm tại vị trí " << viTri << endl;
+                    // Tìm sản phẩm tương ứng
+                    for (size_t i = 0; i < dsSanPham.size(); i++) {
+                        if (dsSanPham[i]->getProductID() == maTim) {
+                            dsSanPham[i]->display();
+                            break;
+                        }
+                    }
+                } else {
+                    cout << "Không tìm thấy sản phẩm!" << endl;
+                }
+                break;
+            }
+
+            // ---------- 21. Sắp xếp sản phẩm ----------
+            case 21: {
+                cout << "=== SAP XEP SAN PHAM ===" << endl;
+                if (dsSanPham.empty()) {
+                    cout << "Chua co san pham de sap xep." << endl;
+                    break;
+                }
+
+                cout << "Chon tieu chi sap xep:" << endl;
+                cout << " 1. Theo ten (A-Z)" << endl;
+                cout << " 2. Theo ma san pham (A-Z)" << endl;
+                cout << " 3. Theo so luong (it den nhieu)" << endl;
+                cout << " 4. Theo so luong (nhieu den it)" << endl;
+                cout << " 5. Theo trang thai (co san -> dang thue -> hu hong)" << endl;
+                cout << " 6. Theo gia thue truyen tranh (VND/thang)" << endl;
+                cout << " 7. Theo gia thue board game (VND/gio)" << endl;
+                cout << "Lua chon: ";
+                getline(cin, s);
+
+                ProductSortCriteria tieuChi;
+                vector<Product*> dsTam;
+                bool sapXepTheoGiaThue = false;
+                bool laTruyenTranh = false;
+
+                if (s == "1") {
+                    tieuChi = PRODUCT_SORT_NAME_ASC;
+                    dsTam = dsSanPham;
+                } else if (s == "2") {
+                    tieuChi = PRODUCT_SORT_ID_ASC;
+                    dsTam = dsSanPham;
+                } else if (s == "3") {
+                    tieuChi = PRODUCT_SORT_QUANTITY_ASC;
+                    dsTam = dsSanPham;
+                } else if (s == "4") {
+                    tieuChi = PRODUCT_SORT_QUANTITY_DESC;
+                    dsTam = dsSanPham;
+                } else if (s == "5") {
+                    tieuChi = PRODUCT_SORT_STATUS_ASC;
+                    dsTam = dsSanPham;
+                } else if (s == "6") {
+                    // Chỉ sắp xếp truyện tranh: giá thuê tính theo tháng.
+                    tieuChi = PRODUCT_SORT_RENTAL_PRICE_ASC;
+                    dsTam = getComicBooks(dsSanPham);
+                    sapXepTheoGiaThue = true;
+                    laTruyenTranh = true;
+                } else if (s == "7") {
+                    // Chỉ sắp xếp board game: giá thuê tính theo giờ.
+                    tieuChi = PRODUCT_SORT_RENTAL_PRICE_ASC;
+                    dsTam = getBoardGames(dsSanPham);
+                    sapXepTheoGiaThue = true;
+                } else {
+                    cout << "Tieu chi khong hop le!" << endl;
+                    break;
+                }
+
+                if (dsTam.empty()) {
+                    cout << "Khong co san pham thuoc nhom nay." << endl;
+                    break;
+                }
+
+                cout << "Chon thuat toan:" << endl;
+                cout << " 1. Bubble Sort" << endl;
+                cout << " 2. Quick Sort" << endl;
+                cout << "Lua chon: ";
+                getline(cin, s);
+
+                if (s == "1") {
+                    // Phần cài đặt Bubble Sort nằm trong data_structures.cpp.
+                    bubbleSortProducts(dsTam, tieuChi);
+                    cout << "Da sap xep bang Bubble Sort." << endl;
+                } else if (s == "2") {
+                    // Phần cài đặt Quick Sort nằm trong data_structures.cpp.
+                    quickSortProducts(dsTam, tieuChi);
+                    cout << "Da sap xep bang Quick Sort." << endl;
+                } else {
+                    cout << "Thuat toan khong hop le!" << endl;
+                    break;
+                }
+
+                cout << "\nDanh sach sau khi sap xep (toi da 20 san pham):" << endl;
+                int soHien = (dsTam.size() < 20)
+                    ? static_cast<int>(dsTam.size()) : 20;
+
+                for (int i = 0; i < soHien; ++i) {
+                    Product* p = dsTam[i];
+                    if (p == nullptr) continue;
+
+                    cout << p->getProductID() << " | " << p->getName()
+                         << " | SL: " << p->getQuantity();
+
+                    if (sapXepTheoGiaThue) {
+                        cout << " | Gia thue: " << p->calculateRentalFee(1)
+                             << (laTruyenTranh ? " VND/thang" : " VND/gio");
+                    }
+                    cout << endl;
+                }
+
+                if (static_cast<int>(dsTam.size()) > soHien) {
+                    cout << "... va " << (dsTam.size() - soHien)
+                         << " san pham khac." << endl;
+                }
+
+                cout << "\nLuu y: danh sach goc khong bi thay doi; day la ket qua sap xep tren danh sach tam." << endl;
+                break;
+            }
+
             case 0:
                 cout << "Tạm biệt!" << endl;
                 break;
 
             default:
-                cout << "Lựa chọn không hợp lệ, hãy nhập số từ 0 đến 14!" << endl;
+                cout << "Lựa chọn không hợp lệ, hãy nhập số từ 0 đến 21!" << endl;
         }
     } while (chon != 0);
 

@@ -1,29 +1,11 @@
 #ifndef TRANSACTIONS_CPP
 #define TRANSACTIONS_CPP
 
-// =============================================================================
 //  Transactions.cpp - TOÀN BỘ MODULE GIAO DỊCH TRONG MỘT FILE (đã gộp .h vào .cpp)
-//
-//  Gộp từ 8 file: Transaction, PurchaseTransaction, BuybackTransaction,
-//  RentalTransaction (mỗi lớp một cặp .h + .cpp). Các phần xếp theo thứ tự
-//  phụ thuộc (lớp cha phải đứng trước lớp con):
-//
 //      PHẦN 1  Transaction          (lớp cha trừu tượng)
 //      PHẦN 2  PurchaseTransaction  (mua hàng)
 //      PHẦN 3  BuybackTransaction   (mua lại truyện cũ)
 //      PHẦN 4  RentalTransaction    (thuê)
-//
-//  Trong mỗi phần: khai báo lớp (trước đây là file .h) đứng trước, phần cài đặt
-//  (trước đây là file .cpp) đứng sau.
-//
-//  Phụ thuộc ngoài file này: "Customer.h" và "Product.h" của nhóm.
-//
-//  CÁCH DÙNG: file này chứa cả khai báo lẫn cài đặt nên không còn .h nào để #include.
-//    - Cách 1: đặt hàm main() ngay trong file này rồi biên dịch riêng file này.
-//    - Cách 2: ở file khác (vd main.cpp) viết  #include "Transactions.cpp"  và KHÔNG
-//      thêm Transactions.cpp vào danh sách biên dịch (nếu không sẽ trùng định nghĩa khi link).
-// =============================================================================
-
 #include <cmath>
 #include <cstddef>
 #include <ctime>
@@ -42,42 +24,6 @@
 //  PHẦN 1/4 : Transaction
 // #############################################################################
 
-// -----------------------------------------------------------------------------
-//  1a. KHAI BÁO  (trước đây là Transaction.h)
-// -----------------------------------------------------------------------------
-
-// =============================================================================
-//  Transaction - Lớp cha TRỪU TƯỢNG của hệ thống giao dịch (mục 3.3)
-//
-//                        Transaction (abstract)
-//                                |
-//            +-------------------+-------------------+
-//            |                   |                   |
-//     RentalTransaction   PurchaseTransaction   BuybackTransaction
-//
-//  Lớp này giữ thông tin CHUNG: mã giao dịch, khách hàng, ngày tạo, trạng thái.
-//  Phần RIÊNG của từng loại giao dịch do lớp con cài đặt (tính đa hình).
-//
-//  ---------------------------------------------------------------------------
-//  YÊU CẦU với class của nhóm (Transaction chỉ gọi đúng các hàm này):
-//      Customer : getId() , getName()
-//      Product  : getId() , getName() , getPrice() , getStock() ,
-//                 increaseStock(int) , decreaseStock(int)
-//  Transaction chỉ GIỮ CON TRỎ tới Customer / Product, không sở hữu và không delete.
-//  Nếu tên hàm của nhóm khác thì chỉ cần sửa lại các chỗ gọi.
-//  ---------------------------------------------------------------------------
-//
-//  Vòng đời trạng thái:
-//
-//      Pending --executeTransaction()--> Processing --> Completed
-//         |                                  |
-//         +---------- cancelTransaction() ---+------> Cancelled
-//
-//  (Mua hàng đi thẳng Pending -> Completed; Thuê và Mua lại đi qua Processing.)
-// =============================================================================
-
-// Lỗi nghiệp vụ: hết hàng, sai trạng thái, tham số không hợp lệ...
-// Dùng try { ... } catch (const TransactionException& e) { std::cout << e.what(); }
 class TransactionException : public std::runtime_error {
 public:
     explicit TransactionException(const std::string& message)
@@ -305,27 +251,7 @@ std::string Transaction::formatMoney(double amount) {
 
 // #############################################################################
 //  PHẦN 2/4 : PurchaseTransaction
-// #############################################################################
 
-// -----------------------------------------------------------------------------
-//  2a. KHAI BÁO  (trước đây là PurchaseTransaction.h)
-// -----------------------------------------------------------------------------
-
-// =============================================================================
-//  PurchaseTransaction - Giao dịch MUA sản phẩm (truyện / boardgame mới)
-//
-//  Trách nhiệm: quản lý sản phẩm mua, số lượng, giá và giảm giá.
-//
-//  Cách dùng:
-//      PurchaseTransaction pt(customer);
-//      pt.purchaseProduct(comic, 3);                    // thêm vào đơn (có kiểm tra kho)
-//      pt.purchaseProduct(game, 1);
-//      pt.applyDiscount(pt.suggestDiscountPercent());   // giảm giá
-//      pt.executeTransaction();                         // thanh toán, trừ kho
-//      std::cout << pt.generateInvoice();               // in hóa đơn
-// =============================================================================
-
-// Một dòng trong đơn mua.
 struct PurchaseItem {
     Product* product;
     int quantity;
@@ -618,32 +544,6 @@ std::string PurchaseTransaction::generateInvoice() const {
 //  PHẦN 3/4 : BuybackTransaction
 // #############################################################################
 
-// -----------------------------------------------------------------------------
-//  3a. KHAI BÁO  (trước đây là BuybackTransaction.h)
-// -----------------------------------------------------------------------------
-
-// =============================================================================
-//  BuybackTransaction - Giao dịch MUA LẠI truyện cũ từ khách
-//
-//  Trách nhiệm: tiếp nhận và định giá truyện cũ khách bán lại cho cửa hàng.
-//
-//  Công thức (theo đề bài):
-//      Giá mua lại = Giá gốc x Tỷ lệ giá trị còn lại
-//  Tỷ lệ còn lại theo tình trạng (chính sách giả lập của dự án):
-//      Excellent 90% | Good 70% | Fair 50% | Poor 20%
-//
-//  Cách dùng:
-//      BuybackTransaction bb(customer);
-//      bb.inspectCondition(comic1, BookCondition::Excellent);   // nhận + kiểm tra từng cuốn
-//      bb.inspectCondition(comic2, BookCondition::Fair, "Ố vàng");
-//      bb.evaluateBook();                                       // định giá, báo giá cho khách
-//      bb.approveBuyback();                                     // khách đồng ý: chi tiền, nhập kho
-//  (Khách không đồng ý giá -> bb.cancelTransaction().)
-//
-//  Mỗi dòng là MỘT cuốn vật lý, vì hai cuốn cùng tên vẫn có thể khác tình trạng.
-// =============================================================================
-
-// Tình trạng cuốn truyện cũ khi khách bán lại.
 enum class BookCondition {
     Excellent,  // Như mới
     Good,       // Tốt
@@ -702,16 +602,6 @@ public:
 private:
     std::vector<BuybackItem> items_;
 };
-
-// -----------------------------------------------------------------------------
-//  3b. CÀI ĐẶT  (trước đây là BuybackTransaction.cpp)
-// -----------------------------------------------------------------------------
-
-// ----------------------------- CHÍNH SÁCH (giả lập) ---------------------------
-// Tỷ lệ giá trị còn lại theo tình trạng sách. Đây là chính sách giả lập của dự án,
-// không phải mức giá thị trường cố định - nhóm có thể tự đổi các con số này.
-// Lưu bằng PHẦN TRĂM (số nguyên) rồi mới chia 100: số thực 0.7 không biểu diễn chính xác,
-// nên "giá x 0.7" có thể ra x.4999... và làm tròn sai 1 đồng (vd: 45 x 0.7 ra 31 thay vì 32).
 namespace {
 const int PERCENT_EXCELLENT = 90;
 const int PERCENT_GOOD = 70;
@@ -894,39 +784,7 @@ void BuybackTransaction::displayTransaction() const {
 //  PHẦN 4/4 : RentalTransaction
 // #############################################################################
 
-// -----------------------------------------------------------------------------
-//  4a. KHAI BÁO  (dựng lại từ phần cài đặt - xem ghi chú bên dưới)
-// -----------------------------------------------------------------------------
 
-// =============================================================================
-//  RentalTransaction - Giao dịch THUÊ sản phẩm (truyện / boardgame)
-//
-//  Trách nhiệm: quản lý phiếu thuê: hạn trả, gia hạn, phí thuê, phí trễ hạn, phí hư hại.
-//
-//  Quy định (chính sách giả lập - đổi ở các hằng số đầu phần cài đặt bên dưới):
-//      Phí thuê 1 ngày = 5% giá bán của sản phẩm
-//      Tổng thời gian thuê tối đa 30 ngày (kể cả gia hạn), gia hạn tối đa 2 lần
-//      Phí trễ 1 ngày  = 150% phí thuê 1 ngày (tổng phí trễ của 1 sản phẩm không vượt quá giá bán)
-//      Đền hư hại      : nhẹ 20% | nặng 50% | mất 100% giá bán
-//
-//  Cách dùng:
-//      RentalTransaction rt(customer, 7);        // thuê 7 ngày, tính từ ngày tạo phiếu
-//      rt.rentProduct(game1);                    // thêm từng bản vào phiếu (có kiểm tra kho)
-//      rt.rentProduct(game2);
-//      rt.executeTransaction();                  // giao hàng, trừ kho (Pending -> Processing)
-//      rt.extendRental(3);                       // (tùy chọn) gia hạn 3 ngày, trả về phí gia hạn
-//      rt.reportDamage(0, DamageLevel::Minor);   // (tùy chọn) ghi nhận hư hại - gọi TRƯỚC returnProduct()
-//      double extra = rt.returnProduct();        // nhận trả hàng, hoàn kho (Processing -> Completed)
-//                                                //   -> trả về phí trễ hạn + phí hư hại phát sinh
-//
-//  Mỗi dòng trong phiếu là MỘT bản vật lý của sản phẩm (thuê 2 bản cùng tên = 2 dòng).
-//
-//  GHI CHÚ: khai báo lớp này được dựng lại từ phần cài đặt bên dưới vì file
-//  RentalTransaction.h gốc chưa được cung cấp lúc gộp. Nếu bản gốc có thêm hàm
-//  hoặc thành phần nào khác thì bổ sung vào đây.
-// =============================================================================
-
-// Mức độ hư hại của một bản sản phẩm khi khách trả.
 enum class DamageLevel {
     None,   // Nguyên vẹn
     Minor,  // Hư hại nhẹ

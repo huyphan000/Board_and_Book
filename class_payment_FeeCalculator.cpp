@@ -1,241 +1,532 @@
+
+#ifndef CLASS_PAYMENT_FEECALCULATOR_CPP
+#define CLASS_PAYMENT_FEECALCULATOR_CPP
+
 #include <iostream>
-#include <string>    
-#include <windows.h> 
-#include "class_book_and_boardgame_docfile.cpp"
-#include "class_Customer_and_Rental.cpp"
-using namespace std; 
-// Khai báo các phương thức thanh toán
-enum PaymentMethod {
-    CASH, // Thanh toán bằng tiền mặt
-    BANK_TRANSFER, // Thanh toán bằng chuyển khoản
-    OTHER_METHOD // Thanh toán bằng phương thức khác
+#include <string>
+#include <sstream>
+using namespace std;
+
+// PHẦN 1: CÁC KIỂU DỮ LIỆU DÙNG CHUNG
+
+// Trạng thái của giao dịch thanh toán
+enum class PaymentStatus {
+    UNPAID,     // Chưa thanh toán
+    PAID,       // Đã thanh toán
+    REFUNDED    // Đã hoàn tiền
+};
+// Kết quả trả về sau khi thực hiện thanh toán
+struct PaymentResult {
+    bool success;       // Thanh toán thành công hay thất bại
+    string message;     // Thông báo kết quả
+    // Hàm khởi tạo kết quả thanh toán
+    PaymentResult(bool s = false, string m = "")
+        : success(s), message(m) {}
 };
 
-// Khai báo các trạng thái thanh toán                   
-enum PaymentStatus {
-    UNPAID, // Chưa thanh toán
-    PAID, // Đã thanh toán
-    REFUNDED // Đã hoàn tiền
-};
-class FeeCalculator {
+// PHẦN 2: PAYMENT - LỚP THANH TOÁN TRỪU TƯỢNG
+
+class Payment {
 private:
-    double bankTransferVATRate; // Tỷ lệ VAT khi chuyển khoản, mặc định 3%
-    double buybackRate;  // Tỷ lệ của hàng mua lại truyền tranh, mặc định 70%
+    string paymentID;           // Mã thanh toán
+    string transactionID;       // Mã giao dịch liên quan
+    double amount;              // Số tiền ban đầu
+    double transactionFee;      // Phí giao dịch
+    double totalAmount;         // Tổng tiền phải thanh toán
+    string paymentDate;         // Ngày thanh toán
+    PaymentStatus status;       // Trạng thái thanh toán
+
+protected:
+    // Cập nhật tổng tiền sau khi tính phí giao dịch
+    void updateTotalAmount() {
+        totalAmount = calculateTotalAmount();
+    }
+
+    // Cho phép lớp con cập nhật trạng thái thanh toán
+    void updateStatus(PaymentStatus s) {
+        status = s;
+    }
 
 public:
-    // Hàm khởi tạo: tự động chạy khi tạo đối tượng FeeCalculator
+    // Constructor khởi tạo thông tin thanh toán
+    Payment(string id, string tid, double a) : paymentID(id), transactionID(tid),
+amount(a), transactionFee(0),  totalAmount(a),
+paymentDate(""), status(PaymentStatus::UNPAID) {}
+    // Destructor ảo của lớp trừu tượng
+    virtual ~Payment() {}
+    // Lấy mã thanh toán
+    string getPaymentID() const {
+        return paymentID;
+    }
+    // Lấy mã giao dịch
+    string getTransactionID() const {
+        return transactionID;
+    }
+    // Lấy số tiền ban đầu
+    double getAmount() const {
+        return amount;
+    }
+    // Lấy tổng số tiền cần thanh toán
+    double getTotalAmount() const {
+        return totalAmount;
+    }
+    // Lấy trạng thái thanh toán
+    PaymentStatus getStatus() const {
+        return status;
+    }
+    // Cập nhật trạng thái thanh toán
+    void setStatus(PaymentStatus s) {
+        // Không cho phép chuyển giao dịch đã hoàn tiền thành trạng thái khác
+        if (status == PaymentStatus::REFUNDED) {
+            return;
+        }
+        status = s;
+    }
+    // Cập nhật phí giao dịch
+    void setTransactionFee(double fee) {
+        if (fee >= 0) {
+            transactionFee = fee;
+            updateTotalAmount();
+        }
+    }
+    // Tính tổng tiền = tiền ban đầu + phí giao dịch
+    double calculateTotalAmount() {
+        totalAmount = amount + transactionFee;
+        return totalAmount;
+    }
+
+    // Phương thức thuần ảo: lớp con bắt buộc phải cài đặt
+    virtual PaymentResult processPayment() = 0;
+
+    // Hoàn tiền nếu giao dịch đã thanh toán
+    virtual bool refundPayment() {
+        if (status != PaymentStatus::PAID) {
+            return false;
+        }
+        status = PaymentStatus::REFUNDED;
+        return true;
+    }
+
+    // Hiển thị thông tin thanh toán
+    virtual void displayPayment() {
+        cout << "\nMa thanh toan: " << paymentID;
+        cout << "\nMa giao dich: " << transactionID;
+        cout << "\nSo tien ban dau: " << amount;
+        cout << "\nPhi giao dich: " << transactionFee;
+        cout << "\nTong tien: " << calculateTotalAmount();
+        cout << "\nTrang thai: ";
+
+        if (status == PaymentStatus::UNPAID)
+            cout << "Chua thanh toan";
+        else if (status == PaymentStatus::PAID)
+            cout << "Da thanh toan";
+        else
+            cout << "Da hoan tien";
+        cout << endl;
+    }
+};
+
+// PHẦN 3: CASHPAYMENT - THANH TOÁN TIỀN MẶT
+
+class CashPayment : public Payment {
+private:
+    double receivedAmount;  // Số tiền khách đưa
+    double changeAmount;    // Số tiền thừa
+
+public:
+    // Constructor khởi tạo thanh toán tiền mặt
+    CashPayment(string id, string tid, double a, double received) : Payment(id, tid, a), 
+receivedAmount(received), changeAmount(0) {}
+    // Lấy số tiền khách đã đưa
+    double getReceivedAmount() const {
+        return receivedAmount;
+    }
+    // Cập nhật số tiền khách đưa
+    void setReceivedAmount(double received) {
+        if (received >= 0) {
+            receivedAmount = received;
+        }
+    }
+    // Kiểm tra số tiền khách đưa có đủ hay không
+    virtual bool verifyCashAmount() {
+        return receivedAmount >= calculateTotalAmount();
+    }
+    // Tính tiền thừa
+    virtual double calculateChange() {
+        if (!verifyCashAmount()) {
+            changeAmount = 0;
+            return changeAmount;
+        }
+        changeAmount = receivedAmount - calculateTotalAmount();
+        return changeAmount;
+    }
+    // Xử lý thanh toán tiền mặt
+    virtual PaymentResult processPayment() override {
+        // Kiểm tra số tiền khách đưa
+        if (!verifyCashAmount()) {
+            return PaymentResult(false, "So tien khach dua khong du");
+        }
+        // Tính tiền thừa
+        calculateChange();
+        // Cập nhật trạng thái đã thanh toán
+        setStatus(PaymentStatus::PAID);
+        return PaymentResult(true, "Thanh toan tien mat thanh cong");
+    }
+    // Hoàn tiền mặt
+    virtual bool refundPayment() override {
+        return Payment::refundPayment();
+    }
+    // Hiển thị thông tin thanh toán tiền mặt
+    virtual void displayPayment() override {
+        Payment::displayPayment();
+        cout << "Tien khach dua: " << receivedAmount << endl;
+        cout << "Tien thua: " << changeAmount << endl;
+    }
+};
+
+// PHẦN 4: CASHATCOUNTER - THANH TOÁN TẠI QUẦY
+
+class CashAtCounter : public CashPayment {
+private:
+    string counterID;       // Mã quầy
+    string staffID;         // Mã nhân viên
+    string cashierName;     // Tên nhân viên thu ngân
+
+public:
+    // Constructor thanh toán tại quầy
+    CashAtCounter(string id, string tid, double a,
+                  string cid, string sid, string name)
+        : CashPayment(id, tid, a, a),
+          counterID(cid), staffID(sid),
+          cashierName(name) {}
+
+    // Kiểm tra số tiền khách đưa
+    virtual bool verifyCashAmount() override {
+        return CashPayment::verifyCashAmount();
+    }
+    // Tính tiền thừa
+    virtual double calculateChange() override {
+        return CashPayment::calculateChange();
+    }
+    // In hóa đơn thanh toán tại quầy
+    void printReceipt() {
+        cout << "\n========== HOA DON THANH TOAN ==========";
+        cout << "\nMa quay: " << counterID;
+        cout << "\nMa nhan vien: " << staffID;
+        cout << "\nThu ngan: " << cashierName;
+        cout << "\nMa thanh toan: " << getPaymentID();
+        cout << "\nTong tien: " << getTotalAmount();
+        cout << "\nTien khach dua: " << getReceivedAmount();
+        cout << "\nTien thua: " << calculateChange();
+        cout << "\n========================================\n";
+    }
+
+    // Xử lý thanh toán tại quầy
+    virtual PaymentResult processPayment() override {
+        PaymentResult result = CashPayment::processPayment();
+        // Chỉ in hóa đơn khi thanh toán thành công
+        if (result.success) {
+            printReceipt();
+        }
+        return result;
+    }
+};
+
+// ============================================================
+// PHẦN 5: BANKTRANSFERPAYMENT - CHUYỂN KHOẢN NGÂN HÀNG
+// ============================================================
+
+class BankTransferPayment : public Payment {
+private:
+    string bankName;                // Tên ngân hàng
+    string transactionReference;    // Mã tham chiếu
+    string accountNumber;           // Số tài khoản nhận tiền
+
+public:
+    // Constructor thanh toán chuyển khoản
+    BankTransferPayment(string id, string tid, double a,
+                        string bank, string ref, string account)
+        : Payment(id, tid, a),
+          bankName(bank),
+          transactionReference(ref),
+          accountNumber(account) {}
+
+    // Kiểm tra thông tin chuyển khoản
+    virtual bool verifyBankTransfer() {
+        return !bankName.empty() &&
+               !accountNumber.empty();
+    }
+    // Kiểm tra mã tham chiếu
+    virtual bool checkReference() {
+        return !transactionReference.empty();
+    }
+    // Xử lý thanh toán chuyển khoản
+    virtual PaymentResult processPayment() override {
+        if (!verifyBankTransfer()) {
+            return PaymentResult(false, "Thong tin ngan hang khong hop le");
+        }
+        if (!checkReference()) {
+            return PaymentResult(false, "Ma tham chieu khong hop le");
+        }
+        // Mô phỏng ngân hàng xác nhận chuyển khoản
+        setStatus(PaymentStatus::PAID);
+
+        return PaymentResult(true, "Thanh toan chuyen khoan thanh cong");
+    }
+    // Hoàn tiền qua chuyển khoản
+    virtual bool refundPayment() override {
+        return Payment::refundPayment();
+    }
+    // Hiển thị thông tin chuyển khoản
+    virtual void displayPayment() override {
+        Payment::displayPayment();
+        cout << "Ngan hang: " << bankName << endl;
+        cout << "Ma tham chieu: " << transactionReference << endl;
+        cout << "So tai khoan: " << accountNumber << endl;
+    }
+};
+
+// PHẦN 6: QRBANKTRANSFER - THANH TOÁN BẰNG MÃ QR
+
+class QRBankTransfer : public BankTransferPayment {
+private:
+    string QRcode;          // Mã QR
+    string bankAccount;     // Tài khoản nhận tiền
+    string transferContent; // Nội dung chuyển khoản
+
+public:
+    // Constructor thanh toán bằng mã QR
+    QRBankTransfer(string id, string tid, double a,
+                   string qr, string account, string content)
+        : BankTransferPayment(id, tid, a, "QR Bank", qr, account),
+          QRcode(qr), bankAccount(account),
+          transferContent(content) {}
+
+    // Tạo mã QR thanh toán
+    string generateQRCode() {
+        return QRcode;
+    }
+    // Kiểm tra mã QR
+    bool scanQRCode() {
+        return !QRcode.empty();
+    }
+    // Xác minh giao dịch QR
+    bool verifyQRTransaction() {
+        return scanQRCode() &&
+               !bankAccount.empty() &&
+               !transferContent.empty();
+    }
+    // Xử lý thanh toán QR
+    virtual PaymentResult processPayment() override {
+        if (!verifyQRTransaction()) {
+            return PaymentResult(false, "Thong tin QR khong hop le");
+        }
+        // Mô phỏng xác nhận giao dịch QR
+        setStatus(PaymentStatus::PAID);
+        return PaymentResult(true, "Thanh toan QR thanh cong");
+    }
+};
+
+// PHẦN 7: EWALLETPAYMENT - THANH TOÁN VÍ ĐIỆN TỬ
+
+class EWalletPayment : public Payment {
+private:
+    string walletProvider;  // Nhà cung cấp ví
+    string walletID;        // Mã tài khoản ví
+    string transactionCode; // Mã giao dịch ví
+
+public:
+    // Constructor thanh toán ví điện tử
+    EWalletPayment(string id, string tid, double a,
+                   string provider, string wid)
+        : Payment(id, tid, a),
+          walletProvider(provider),
+          walletID(wid),
+          transactionCode("") {}
+
+    // Kiểm tra thông tin ví điện tử
+    virtual bool verifyWallet() {
+        return !walletProvider.empty() &&
+               !walletID.empty();
+    }
+    // Xác nhận giao dịch ví điện tử
+    virtual bool confirmTransaction() {
+        return !transactionCode.empty();
+    }
+    // Cập nhật mã giao dịch ví
+    void setTransactionCode(string code) {
+        transactionCode = code;
+    }
+
+    // Xử lý thanh toán ví điện tử
+    virtual PaymentResult processPayment() override {
+        if (!verifyWallet()) {
+            return PaymentResult(false, "Thong tin vi dien tu khong hop le");
+        }
+        if (!confirmTransaction()) {
+            return PaymentResult(false, "Giao dich vi chua duoc xac nhan");
+        }
+        // Mô phỏng ví điện tử xác nhận thanh toán
+        setStatus(PaymentStatus::PAID);
+        return PaymentResult(true, "Thanh toan vi dien tu thanh cong");
+    }
+
+    // Hoàn tiền qua ví điện tử
+    virtual bool refundPayment() override {
+        return Payment::refundPayment();
+    }
+
+    // Hiển thị thông tin ví điện tử
+    virtual void displayPayment() override {
+        Payment::displayPayment();
+        cout << "Nha cung cap vi: " << walletProvider << endl;
+        cout << "Ma vi: " << walletID << endl;
+        cout << "Ma giao dich vi: " << transactionCode << endl;
+    }
+};
+
+// PHẦN 8: MOMOPAYMENT - THANH TOÁN MOMO
+
+class MomoPayment : public EWalletPayment {
+private:
+    string momoAccount;         // Tài khoản MoMo
+    string momoTransactionID;   // Mã giao dịch MoMo
+    string momoStatus;          // Trạng thái MoMo
+
+public:
+    // Constructor thanh toán MoMo
+    MomoPayment(string id, string tid, double a,
+                string account, string mtid)
+        : EWalletPayment(id, tid, a, "MoMo", account),
+          momoAccount(account),
+          momoTransactionID(mtid),
+          momoStatus("UNPAID") {
+
+        // Gán mã giao dịch MoMo cho lớp cha
+        setTransactionCode(mtid);
+    }
+    // Kiểm tra kết nối tài khoản MoMo
+    bool connectMomoAccount() {
+        return !momoAccount.empty();
+    }
+    // Xác minh tài khoản MoMo
+    bool verifyMomoAccount() {
+        return connectMomoAccount();
+    }
+    // Xác nhận giao dịch MoMo
+    bool confirmMomoTransaction() {
+        return !momoTransactionID.empty();
+    }
+
+    // Xử lý thanh toán MoMo
+    virtual PaymentResult processPayment() override {
+        if (!verifyMomoAccount()) {
+            return PaymentResult(false, "Tai khoan MoMo khong hop le");
+        }
+        if (!confirmMomoTransaction()) {
+            return PaymentResult(false, "Ma giao dich MoMo khong hop le");
+        }
+        momoStatus = "PAID";
+        setStatus(PaymentStatus::PAID);
+        return PaymentResult(true, "Thanh toan MoMo thanh cong");
+    }
+};
+
+// PHẦN 9: ZALOPAYPAYMENT - THANH TOÁN ZALOPAY
+
+class ZaloPayPayment : public EWalletPayment {
+private:
+    string zaloPayAccount;          // Tài khoản ZaloPay
+    string zaloPayTransactionID;    // Mã giao dịch ZaloPay
+    string zaloPayStatus;           // Trạng thái ZaloPay
+
+public:
+    // Constructor thanh toán ZaloPay
+    ZaloPayPayment(string id, string tid, double a,
+                   string account, string ztid)
+        : EWalletPayment(id, tid, a, "ZaloPay", account),
+          zaloPayAccount(account),
+          zaloPayTransactionID(ztid),
+          zaloPayStatus("UNPAID") {
+        // Gán mã giao dịch ZaloPay cho lớp cha
+        setTransactionCode(ztid);
+    }
+    // Kiểm tra kết nối tài khoản ZaloPay
+    bool connectZaloPayAccount() {
+        return !zaloPayAccount.empty();
+    }
+    // Xác minh tài khoản ZaloPay
+    bool verifyZaloPayAccount() {
+        return connectZaloPayAccount();
+    }
+    // Xác nhận giao dịch ZaloPay
+    bool confirmZaloPayTransaction() {
+        return !zaloPayTransactionID.empty();
+    }
+
+    // Xử lý thanh toán ZaloPay
+    virtual PaymentResult processPayment() override {
+        if (!verifyZaloPayAccount()) {
+            return PaymentResult(false, "Tai khoan ZaloPay khong hop le");
+        }
+
+        if (!confirmZaloPayTransaction()) {
+            return PaymentResult(false, "Ma giao dich ZaloPay khong hop le");
+        }
+
+        zaloPayStatus = "PAID";
+        setStatus(PaymentStatus::PAID);
+        return PaymentResult(true, "Thanh toan ZaloPay thanh cong");
+    }
+};
+
+// PHẦN 10: FEECALCULATOR - LỚP TÍNH PHÍ VÀ VAT
+
+class FeeCalculator {
+private:
+    double vatRate;    // Tỷ lệ VAT, mặc định 8%
+
+public:
+    // Constructor khởi tạo tỷ lệ VAT mặc định 8%
     FeeCalculator() {
-        bankTransferVATRate = 0.03; buybackRate = 0.70;         
-    }
-    // Tính tiền thuê dựa trên sản phẩm được truyền vào
-    // duration là số tháng thuê truyền tranh hoặc số giờ thuê board game
-    double calculateRentalFee(Product* product, int duration) const {
-        if (product == nullptr || duration <= 0)
-            return 0;
-        // Gọi hàm tính tiền thuê của sản phẩm cụ thể
-        return product->calculateRentalFee(duration);
-    }
-
-    // Tính phí trễ hạn
-    // lateDays: số ngày trễ    
-    // feePerDay: phí phạt cho mỗi ngày trễ
-    double calculateLateFee(int lateDays, double feePerDay) const {
-        if (lateDays <= 0 || feePerDay <= 0)
-            return 0;
-        return lateDays * feePerDay;
-    }
-
-    // Tính phí hư hỏng
-    // damageFee là mức phí hư hỏng đã được xác định trước
-    double calculateDamageFee(double damageFee) const {
-        if (damageFee <= 0)
-            return 0;
-        return damageFee;
-    }
-    // Tính tổng phí thuê, phí trễ hạn và phí hư hỏng
-    double calculateTotalFee(double rentalFee, double lateFee,
-        double damageFee) const {
-        if (rentalFee < 0) rentalFee = 0;
-        if (lateFee < 0) lateFee = 0;
-        if (damageFee < 0) damageFee = 0;
-
-        return rentalFee + lateFee + damageFee;
-    }
-    // Tính tiền mua sản phẩm theo số lượng
-    double calculatePurchaseFee(Product* product, int quantity) const {
-        if (product == nullptr || quantity <= 0)
-            return 0;
-
-        // Gọi hàm tính tiền mua của sản phẩm cụ thể
-        return product->calculatePurchaseFee(quantity);
-    }
-    // Tính giá của hàng mua lại truyền tranh
-    double calculateBuybackPrice(double originalPrice) const {
-        if (originalPrice <= 0)
-            return 0;
-
-        // Giá mua lại = giá gốc * 70%
-        return originalPrice * buybackRate;
-    }
-    // Tính VAT dựa trên phương thức thanh toán
-    double calculateVAT(double amount, PaymentMethod method) const {
-        if (amount <= 0)
-            return 0;
-
-        // Nếu chuyển khoản thì tính VAT 3%
-        if (method == BANK_TRANSFER)
-            return amount * bankTransferVATRate;
-       // Các phương thức khác không tính VAT theo quy ước này
-        return 0;
+        vatRate = 0.08;
     }
     // Lấy tỷ lệ VAT hiện tại
     double getVATRate() const {
-        return bankTransferVATRate;
+        return vatRate;
     }
-    // Lấy tỷ lệ mua lại hiện tại
-    double getBuybackRate() const {
-        return buybackRate;
+    // Cập nhật tỷ lệ VAT
+    void setVATRate(double rate) {
+        if (rate >= 0 && rate <= 1) {
+            vatRate = rate;
+        }
     }
-};
-class Payment {
-private:
-    string paymentId; // Mã thanh toán
-    string rentalId; // Mã giao dịch thuê liên quan
-    double amount; // Số tiền gốc, chưa tính VAT
-    PaymentMethod method; // Phương thức thanh toán
-    Date paymentDate; // Ngày thanh toán
-    PaymentStatus status; // Trạng thái thanh toán
-    double vatAmount; // Số tiền VAT
-
-public:
-    // Hàm khởi tạo đối tượng Payment
-    Payment(string pId, string rId, double money,
-        PaymentMethod m, Date pDate,
-        PaymentStatus s = UNPAID) {
-        paymentId = pId; // Gán mã thanh toán
-        rentalId = rId; // Gán mã giao dịch thuê
-
-        // Nếu số tiền không âm thì nhận số tiền đó, ngược lại gán bằng 0
-        amount = (money >= 0) ? money : 0;
-
-        method = m; // Lưu phương thức thanh toán
-        paymentDate = pDate; // Lưu ngày thanh toán
-        status = s; // Lưu trạng thái ban đầu
-        vatAmount = 0; // Ban đầu chưa tính VAT
+    // Tính tổng phí trước VAT
+    // Các khoản phí được truyền từ Transaction
+    double calculateSubtotal(double rentalFee,
+                             double lateFee,
+                             double damageFee) {
+        return rentalFee + lateFee + damageFee;
     }
-
-    // Các hàm getter dùng để đọc giá trị thuộc tính private
-    string getPaymentId() const { return paymentId; } // Lấy mã thanh toán
-    string getRentalId() const { return rentalId; } // Lấy mã giao dịch thuê
-    double getAmount() const { return amount; } // Lấy tiền gốc
-    double getVATAmount() const { return vatAmount; } // Lấy tiền VAT
-    PaymentMethod getMethod() const { return method; } // Lấy phương thức
-    PaymentStatus getStatus() const { return status; } // Lấy trạng thái
-
-    // Tính tổng số tiền phải thanh toán
-    double getTotalAmount() const {
-        return amount + vatAmount; // Tiền gốc + VAT
+    // Tính VAT trên toàn bộ tổng phí
+    double calculateVAT(double subtotal) {
+        return subtotal * vatRate;
     }
-
-    // Thực hiện thanh toán
-    void makePayment(const FeeCalculator& calculator) {
-        // Nhớ FeeCalculator tính VAT theo số tiền và phương thức
-        vatAmount = calculator.calculateVAT(amount, method);
-
-        // Cập nhật trạng thái thành đã thanh toán
-        status = PAID;
+    // Tính tổng tiền cuối cùng bao gồm VAT
+    double calculateFinalPayable(double subtotal) {
+        return subtotal + calculateVAT(subtotal);
     }
-    // Cập nhật trạng thái giao dịch thành đã hoàn tiền
-    void refundPayment() {
-        status = REFUNDED;
-    }
-    // Hiển thị thông tin thanh toán    
-    void display() const {
-        cout << "\nTHÔNG TIN THANH TOÁN:" << endl;
-        cout << "Mã thanh toán: " << paymentId << endl; // In mã thanh toán
-		cout << "Mã giao dịch: " << rentalId << endl; // In mã giao dịch thuê
-        cout << "Tiền gốc: " << amount << " VND" << endl; // In tiền gốc
-        // Hiển thị phương thức thanh toán
-        cout << "Phương thức: ";
-        if (method == CASH)
-            cout << "Tiền mặt" << endl;
-        else if (method == BANK_TRANSFER)
-            cout << "Chuyển khoản" << endl;
-        else
-            cout << "Phương thức khác" << endl;
-        // Hiển thị tiền VAT và tổng tiền
-        cout << "VAT: " << vatAmount << " VND" << endl;
-        cout << "Tổng thanh toán: " << getTotalAmount() << " VND" << endl;
-        // Hiển thị ngày thanh toán
-        cout << "Ngày thanh toán: ";
-        paymentDate.display();
-        cout << endl;
-        // Hiển thị trạng thái thanh toán
-        cout << "Trạng thái: ";
-        if (status == UNPAID)
-            cout << "Chưa thanh toán" << endl;
-        else if (status == PAID)
-            cout << "Đã thanh toán" << endl;
-        else
-            cout << "Đã hoàn tiền" << endl;
+    // Tính số tiền cần hoàn lại sau khi trừ khoản khấu trừ
+    double calculateRefundAmount(double paidAmount,
+                                 double deduction) {
+        if (paidAmount < 0 || deduction < 0) {
+            return 0;
+        }
+        if (deduction > paidAmount) {
+            return 0;
+        }
+        return paidAmount - deduction;
     }
 };
-class PaymentStatistics {
-private:
-    int transactionCount; // Số giao dịch đã thanh toán
-    double totalBaseAmount; // Tổng tiền gốc trước VAT
-    double totalVAT; // Tổng tiền VAT
-    double totalCollected; // Tổng tiền thu được cả VAT
-    double cashCollected; // Tổng tiền thu bằng tiền mặt
-    double bankTransferCollected; // Tổng tiền thu bằng chuyển khoản
-    double otherCollected; // Tổng tiền thu bằng cách khác
 
-public:
-    // Hàm khởi tạo: ban đầu tất cả số liệu bằng 0
-    PaymentStatistics() {
-        transactionCount = 0;
-        totalBaseAmount = 0;
-        totalVAT = 0;
-        totalCollected = 0;
-        cashCollected = 0;
-        bankTransferCollected = 0;
-        otherCollected = 0;
-    }
-
-    // Ghi nhận một giao dịch vao thống kê
-    void recordPayment(const Payment& payment) {
-        // Nếu giao dịch chưa thanh toán hoặc đã hoàn tiền thì bỏ qua
-        if (payment.getStatus() != PAID)
-            return;
-        // Tăng số giao dịch đã thanh toán
-        transactionCount++;
-
-        // Cộng tiền gốc vào tổng tiền trước VAT
-        totalBaseAmount += payment.getAmount();
-
-        // Cộng VAT vào tổng VAT
-        totalVAT += payment.getVATAmount();
-
-        // Cộng tổng tiền đã thu, bao gồm VAT
-        totalCollected += payment.getTotalAmount();
-
-        // Cộng tiền vào nhóm phương thức thanh toán tương ứng
-        if (payment.getMethod() == CASH)
-            cashCollected += payment.getTotalAmount();
-        else if (payment.getMethod() == BANK_TRANSFER)
-            bankTransferCollected += payment.getTotalAmount();
-        else
-            otherCollected += payment.getTotalAmount();
-    }
-    // Hiển thị báo cáo thống kê
-    void displayStatistics() const {
-        cout << "\nTHÔNG KÊ THANH TOÁN:" << endl;
-        cout << "Số giao dịch đã thanh toán: "<< transactionCount << endl;
-        cout << "Tổng tiền trước VAT: " << totalBaseAmount << " VND" << endl;
-        cout << "Tổng VAT: " << totalVAT << " VND" << endl;
-        cout << "Tổng tiền thu được: " << totalCollected << " VND" << endl;
-        cout << "Thu bằng tiền mặt: " << cashCollected << " VND" << endl;
-        cout << "Thu bằng chuyển khoản: "<< bankTransferCollected << " VND" << endl;
-        cout << "Thu bằng cách khác: " << otherCollected << " VND" << endl;
-    }
-};
+#endif

@@ -14,12 +14,12 @@ private:
     int month; // Tháng
     int year;  // Năm
 
-    //Kiểm tra năm nhuận để tính đúng số ngày của tháng 2
+    // Kiểm tra năm nhuận để tính đúng số ngày của tháng 2
     static bool isLeapYear(int y) {
         return ((y % 4 == 0 && y % 100 != 0) || (y % 400 == 0));
     }
 
-    //Trả về số ngày tối đa của 1 tháng
+    // Trả về số ngày tối đa của 1 tháng
     static int daysInMonth(int m, int y) {
         if (m == 4 || m == 6 || m == 9 || m == 11) {
             return 30;
@@ -37,7 +37,7 @@ private:
     }
 
 public:
-    //Hàm khởi tạo ngày tháng
+    // Hàm khởi tạo ngày tháng
     Date(int d = 1, int m = 1, int y = 2026) {
         if (y > 0) {
             year = y;
@@ -86,23 +86,24 @@ public:
         return day >= other.day;
     }
 
-    //  In ngày tháng theo định dạng dd/mm/yyyy
+    // In ngày tháng theo định dạng dd/mm/yyyy
     void display() const {
         cout << setfill('0') << setw(2) << day << "/"
              << setw(2) << month << "/"
-             << setw(4) << year;
+             << setw(4) << year << setfill(' ');
     }
 };
 
 // LỚP GỐC: KHÁCH HÀNG CHUNG (Customer)
 class Customer {
-protected:
+private:
     string customerId;        // Mã khách hàng (VD: KH01)
-    string phone;             // Số điện thoại
-    string email;             // Địa chỉ email
     int currentBorrowedCount; // Số lượng đồ đang mượn hiện tại
 
-public:
+protected:
+    string phone;             // Số điện thoại
+    string email;             // Địa chỉ email
+
     // Hàm khởi tạo thông tin cơ bản cho khách hàng
     Customer(const string& id, const string& p, const string& mail, int borrowed = 0) {
         customerId = id;
@@ -116,9 +117,7 @@ public:
         }
     }
 
-    //Hàm hủy ảo để xóa sạch bộ nhớ
-    virtual ~Customer() {}
-
+public:
     // Lấy mã khách hàng
     string getCustomerId() const {
         return customerId;
@@ -129,26 +128,24 @@ public:
         return currentBorrowedCount;
     }
 
-    
     // Lấy tên phân khúc/loại khách hàng
     virtual string getCustomerType() const = 0;
 
-    //Lấy họ tên (khách cá nhân) hoặc tên tổ chức (đối tác)
+    // Lấy họ tên (khách cá nhân) hoặc tên tổ chức (đối tác)
     virtual string getName() const = 0;
 
-    //Tính % giảm giá mặc định theo phân khúc
+    // Tính % giảm giá mặc định theo phân khúc
     virtual double calculateDiscount(const Date& today) const = 0;
 
-    //Tính số đồ được phép mượn tối đa
+    // Tính số đồ được phép mượn tối đa
     virtual int getRentalLimit(const Date& today) const = 0;
 
-   
     // Tính mức giảm giá cuối cùng thực tế áp dụng
     virtual double getFinalDiscount(const Date& today) const {
         return calculateDiscount(today);
     }
 
-    //Kiểm tra xem khách có mượn vượt quá hạn mức cho phép không
+    // Kiểm tra xem khách có mượn vượt quá hạn mức cho phép không
     bool canRent(int quantity, const Date& today) const {
         return (quantity > 0) && (currentBorrowedCount + quantity <= getRentalLimit(today));
     }
@@ -163,7 +160,7 @@ public:
         }
     }
 
-    //Cập nhật trừ bớt số đồ đang mượn khi khách trả đồ
+    // Cập nhật trừ bớt số đồ đang mượn khi khách trả đồ
     bool returnItems(int quantity) {
         if (quantity > 0 && quantity <= currentBorrowedCount) {
             currentBorrowedCount -= quantity;
@@ -173,24 +170,27 @@ public:
         }
     }
 
-    //In các thông tin của khách hàng 
+    // In các thông tin của khách hàng
     virtual void display() const {
         cout << "------------------------------------------\n";
         cout << "Ma KH: " << customerId << " | SDT: " << phone << "\n";
         cout << "Email: " << email << " | Dang muon: " << currentBorrowedCount << " mon\n";
     }
+
+    // Hàm hủy ảo để xóa sạch bộ nhớ
+    virtual ~Customer() {}
 };
 
 // LỚP KHÁCH CÁ NHÂN (IndividualCustomer)
-
 class IndividualCustomer : public Customer {
-protected:
-    string fullName;  // Họ và tên khách hàng
+private:
     Date dateOfBirth; // Ngày tháng năm sinh
     string gender;    // Giới tính
+
+protected:
+    string fullName;  // Họ và tên khách hàng
     string address;   // Địa chỉ cư trú
 
-public:
     // Hàm khởi tạo thông tin chung cho khách cá nhân
     IndividualCustomer(const string& id, const string& p, const string& mail,
                        const string& name, const Date& dob, const string& gen,
@@ -201,12 +201,13 @@ public:
         address = addr;
     }
 
-    // Trả về họ tên khách hàng 
+public:
+    // Trả về họ tên khách hàng
     string getName() const override {
         return fullName;
     }
 
-    //Ưu tiên giảm 35% nếu trùng tháng sinh nhật, ngược lại tính theo phân khúc
+    // Ưu tiên giảm 35% nếu trùng tháng sinh nhật, ngược lại tính theo phân khúc
     double getFinalDiscount(const Date& today) const override {
         if (dateOfBirth.getMonth() == today.getMonth()) {
             return 0.35;
@@ -225,7 +226,7 @@ public:
     }
 };
 
-//  Khách thường (RegularCustomer)
+// Khách thường (RegularCustomer)
 class RegularCustomer : public IndividualCustomer {
 public:
     // Hàm khởi tạo khách thường
@@ -234,12 +235,12 @@ public:
                     const string& addr, int borrowed = 0)
         : IndividualCustomer(id, p, mail, name, dob, gen, addr, borrowed) {}
 
-    //Trả về tên loại khách "Regular"
+    // Trả về tên loại khách "Regular"
     string getCustomerType() const override {
         return "Regular";
     }
 
-    //Trả về hạn mức mượn tối đa của khách thường (3 món)
+    // Trả về hạn mức mượn tối đa của khách thường (3 món)
     int getRentalLimit(const Date& today) const override {
         (void)today;
         return 3;
@@ -258,7 +259,7 @@ public:
     }
 };
 
-//  Khách Học sinh - Sinh viên (StudentCustomer)
+// Khách Học sinh - Sinh viên (StudentCustomer)
 class StudentCustomer : public IndividualCustomer {
 private:
     string studentID;  // Mã số học sinh / sinh viên (MSSV)
@@ -276,12 +277,12 @@ public:
         schoolName = school;
     }
 
-    //Trả về tên loại khách "Student"
+    // Trả về tên loại khách "Student"
     string getCustomerType() const override {
         return "Student";
     }
 
-    //Thẻ còn hạn cho mượn 5 món, hết hạn tụt về 3 món như khách thường
+    // Thẻ còn hạn cho mượn 5 món, hết hạn tụt về 3 món như khách thường
     int getRentalLimit(const Date& today) const override {
         if (cardExpiry >= today) {
             return 5;
@@ -299,7 +300,7 @@ public:
         }
     }
 
-    //In chi tiết thông tin khách HSSV
+    // In chi tiết thông tin khách HSSV
     void display() const override {
         IndividualCustomer::display();
         cout << "Phan khuc: HSSV | MSSV: " << studentID << " | Truong: " << schoolName << "\n";
@@ -316,7 +317,7 @@ private:
     double annualFee; // Phí duy trì VIP hằng năm
 
 public:
-    //Hàm khởi tạo khách hàng VIP
+    // Hàm khởi tạo khách hàng VIP
     VIPCustomer(const string& id, const string& p, const string& mail,
                 const string& name, const Date& dob, const string& gen,
                 const string& addr, const Date& expiry, double fee = 120000.0, int borrowed = 0)
@@ -324,12 +325,12 @@ public:
         annualFee = fee;
     }
 
-    //Trả về tên loại khách "VIP"
+    // Trả về tên loại khách "VIP"
     string getCustomerType() const override {
         return "VIP";
     }
 
-    //VIP còn hạn mượn 10 món, hết hạn tụt về 3 món
+    // VIP còn hạn mượn 10 món, hết hạn tụt về 3 món
     int getRentalLimit(const Date& today) const override {
         if (vipExpiry >= today) {
             return 10;
@@ -338,7 +339,7 @@ public:
         }
     }
 
-    //VIP còn hạn giảm 25%, hết hạn không giảm (0%)
+    // VIP còn hạn giảm 25%, hết hạn không giảm (0%)
     double calculateDiscount(const Date& today) const override {
         if (vipExpiry >= today) {
             return 0.25;
@@ -347,10 +348,10 @@ public:
         }
     }
 
-    //In chi tiết thông tin khách VIP
+    // In chi tiết thông tin khách VIP
     void display() const override {
         IndividualCustomer::display();
-        cout << "Phan khuc: VIP | Han VIP: ";
+        cout << "Phan khuc: VIP | Phi thuong nien: " << fixed << setprecision(0) << annualFee << " VND | Han VIP: ";
         vipExpiry.display();
         cout << "\n";
     }
@@ -358,11 +359,12 @@ public:
 
 // LỚP TỔ CHỨC / ĐỐI TÁC (PartnerCustomer)
 class PartnerCustomer : public Customer {
-protected:
+private:
     string orgName; // Tên tổ chức / quán cafe / câu lạc bộ
+
+protected:
     string address; // Địa chỉ của tổ chức
 
-public:
     // Hàm khởi tạo thông tin chung cho khách tổ chức
     PartnerCustomer(const string& id, const string& p, const string& mail,
                     const string& org, const string& addr, int borrowed = 0)
@@ -371,12 +373,13 @@ public:
         address = addr;
     }
 
-    //Trả về tên tổ chức
+public:
+    // Trả về tên tổ chức
     string getName() const override {
         return orgName;
     }
 
-    //  In thông tin cơ bản của tổ chức
+    // In thông tin cơ bản của tổ chức
     void display() const override {
         Customer::display();
         cout << "To chuc: " << orgName << " | Dia chi: " << address << "\n";
@@ -389,14 +392,14 @@ private:
     int contractMonths; // Thời hạn hợp đồng (tính theo tháng)
 
 public:
-    //Hàm khởi tạo đối tác Quán Cafe
+    // Hàm khởi tạo đối tác Quán Cafe
     CafePartnerCustomer(const string& id, const string& p, const string& mail,
                         const string& org, const string& addr, int months, int borrowed = 0)
         : PartnerCustomer(id, p, mail, org, addr, borrowed) {
         contractMonths = months;
     }
 
-    //Trả về tên loại khách "Cafe Partner"
+    // Trả về tên loại khách "Cafe Partner"
     string getCustomerType() const override {
         return "Cafe Partner";
     }
@@ -407,7 +410,7 @@ public:
         return 100;
     }
 
-    //Hợp đồng >= 6 tháng giảm 40%, bình thường giảm 30%
+    // Hợp đồng >= 6 tháng giảm 40%, bình thường giảm 30%
     double calculateDiscount(const Date& today) const override {
         (void)today;
 
@@ -441,7 +444,7 @@ public:
         memberCount = members;
     }
 
-    //Trả về tên loại khách "Club"
+    // Trả về tên loại khách "Club"
     string getCustomerType() const override {
         return "Club";
     }
@@ -452,7 +455,7 @@ public:
         return 20;
     }
 
-    //CLB trên 50 thành viên giảm 25%, bình thường giảm 20%
+    // CLB trên 50 thành viên giảm 25%, bình thường giảm 20%
     double calculateDiscount(const Date& today) const override {
         (void)today;
 
@@ -470,5 +473,4 @@ public:
              << " | T.Vien: " << memberCount << "\n";
     }
 };
-
 #endif

@@ -351,7 +351,7 @@ public:
     // In chi tiết thông tin khách VIP
     void display() const override {
         IndividualCustomer::display();
-        cout << "Phan khuc: VIP | Phi thuong nien: " << fixed << setprecision(0) << annualFee << " VND | Han VIP: ";
+        cout << "Phan khuc: VIP | Phi thuong nien: " << fixed << setprecision(0) << (long long)annualFee << " VND | Han VIP: ";
         vipExpiry.display();
         cout << "\n";
     }
@@ -360,7 +360,7 @@ public:
 // LỚP TỔ CHỨC / ĐỐI TÁC (PartnerCustomer)
 class PartnerCustomer : public Customer {
 private:
-    string orgName; // Tên tổ chức / quán cafe / câu lạc bộ
+    string orgName; // Tên tổ chức / quán cafe / câu lạc bộ / đơn vị sự kiện
 
 protected:
     string address; // Địa chỉ của tổ chức
@@ -396,7 +396,11 @@ public:
     CafePartnerCustomer(const string& id, const string& p, const string& mail,
                         const string& org, const string& addr, int months, int borrowed = 0)
         : PartnerCustomer(id, p, mail, org, addr, borrowed) {
-        contractMonths = months;
+        if (months > 0) {
+            contractMonths = months;
+        } else {
+            contractMonths = 1;
+        }
     }
 
     // Trả về tên loại khách "Cafe Partner"
@@ -431,17 +435,21 @@ public:
 // Câu lạc bộ (ClubCustomer)
 class ClubCustomer : public PartnerCustomer {
 private:
-    string universityName; // Tên trường trực thuộc
-    int memberCount;       // Số lượng thành viên của CLB
+    string clubType; // Loại hình CLB (VD: Cong dong, Truong hoc, Cong ty)
+    int memberCount; // Số lượng thành viên của CLB
 
 public:
     // Hàm khởi tạo khách Câu lạc bộ
     ClubCustomer(const string& id, const string& p, const string& mail,
-                 const string& org, const string& addr, const string& uni,
+                 const string& org, const string& addr, const string& type,
                  int members, int borrowed = 0)
         : PartnerCustomer(id, p, mail, org, addr, borrowed) {
-        universityName = uni;
-        memberCount = members;
+        clubType = type;
+        if (members > 0) {
+            memberCount = members;
+        } else {
+            memberCount = 1;
+        }
     }
 
     // Trả về tên loại khách "Club"
@@ -455,11 +463,11 @@ public:
         return 20;
     }
 
-    // CLB trên 50 thành viên giảm 25%, bình thường giảm 20%
+    // CLB trên 40 thành viên giảm 25%, bình thường giảm 20%
     double calculateDiscount(const Date& today) const override {
         (void)today;
 
-        if (memberCount > 50) {
+        if (memberCount > 40) {
             return 0.25;
         } else {
             return 0.20;
@@ -469,8 +477,59 @@ public:
     // In chi tiết thông tin Câu lạc bộ
     void display() const override {
         PartnerCustomer::display();
-        cout << "Phan khuc: Cau lac bo | Truong: " << universityName
+        cout << "Phan khuc: Cau lac bo | Loai hinh: " << clubType
              << " | T.Vien: " << memberCount << "\n";
     }
 };
+
+// Đối tác Sự kiện (EventPartnerCustomer)
+class EventPartnerCustomer : public PartnerCustomer {
+private:
+    string eventName; // Tên sự kiện / chương trình (VD: Workshop, Teambuilding)
+    int eventDays;    // Số ngày diễn ra sự kiện
+
+public:
+    // Hàm khởi tạo đối tác Sự kiện
+    EventPartnerCustomer(const string& id, const string& p, const string& mail,
+                         const string& org, const string& addr, const string& eName,
+                         int days, int borrowed = 0)
+        : PartnerCustomer(id, p, mail, org, addr, borrowed) {
+        eventName = eName;
+        if (days > 0) {
+            eventDays = days;
+        } else {
+            eventDays = 1;
+        }
+    }
+
+    // Trả về tên loại khách
+    string getCustomerType() const override {
+        return "Event Partner";
+    }
+
+    // Hạn mức mượn cho sự kiện (50 món)
+    int getRentalLimit(const Date& today) const override {
+        (void)today;
+        return 50;
+    }
+
+    // Sự kiện >= 3 ngày giảm 30%, dưới 3 ngày giảm 20%
+    double calculateDiscount(const Date& today) const override {
+        (void)today;
+
+        if (eventDays >= 3) {
+            return 0.30;
+        } else {
+            return 0.20;
+        }
+    }
+
+    // In chi tiết thông tin đối tác Sự kiện
+    void display() const override {
+        PartnerCustomer::display();
+        cout << "Phan khuc: Su kien | Ten SK: " << eventName
+             << " | Thoi luong: " << eventDays << " ngay\n";
+    }
+};
+
 #endif
